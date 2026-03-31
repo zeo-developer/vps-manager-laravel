@@ -12,8 +12,9 @@ run_remove_site() {
     
     if [ "$confirm" != "YES" ]; then
         info "Đã huỷ bỏ lệnh xoá."
-        exit 0
+        return
     fi
+
 
     info "Bắt đầu thủ tục HUỶ DIỆT dự án $domain ..."
 

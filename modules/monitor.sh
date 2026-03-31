@@ -76,8 +76,9 @@ setup_telegram_if_needed() {
     # Bỏ qua tương tác nếu chạy qua crontab
     if [ ! -t 0 ]; then
         if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
-            exit 1
+            return 1
         fi
+
         return
     fi
 

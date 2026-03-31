@@ -12,7 +12,11 @@ NC='\033[0m' # No Color
 
 info() { echo -e "${GREEN}[INFO] $1${NC}"; }
 warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
-error() { echo -e "${RED}[ERROR] $1${NC}"; exit 1; }
+error() { 
+    echo -e "${RED}[ERROR] $1${NC}"
+    return 1 2>/dev/null || exit 1 
+}
+
 
 # Lọc bỏ ký tự nguy hiểm đầu vào
 sanitize_input() {
