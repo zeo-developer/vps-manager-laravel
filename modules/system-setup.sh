@@ -74,17 +74,24 @@ run_system_setup() {
     local USER_HOME=$(getent passwd "$APP_USER" | cut -d: -f6)
     USER_HOME="${USER_HOME:-/home/$APP_USER}"
     
-    # Đảm bảo thư mục .ssh tồn tại với đúng quyền
-    su - "$APP_USER" -s /bin/bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+    # [FIX V15.0] Đảm bảo thư mục gốc (vd: /var/www) tồn tại
+    if [ ! -d "$USER_HOME" ]; then
+        info "Khởi tạo thư mục Home [ $USER_HOME ]..."
+        mkdir -p "$USER_HOME"
+        chown "$APP_USER":"$APP_USER" "$USER_HOME"
+    fi
+
+    # [FIX V15.0] Tạo .ssh và sinh Key bằng quyền Root (An toàn nhất)
+    mkdir -p "${USER_HOME}/.ssh"
+    chmod 700 "${USER_HOME}/.ssh"
     
     if [ ! -f "${USER_HOME}/.ssh/id_ed25519" ]; then
         info "Đang tạo SSH Key mới tại ${USER_HOME}/.ssh/id_ed25519 ..."
         ssh-keygen -t ed25519 -C "deploy_vps_manager" -N "" -f "${USER_HOME}/.ssh/id_ed25519" -q
-        chown "$APP_USER":"$APP_USER" "${USER_HOME}/.ssh/id_ed25519" "${USER_HOME}/.ssh/id_ed25519.pub"
     fi
     
-    # Bypass StrictHostKeyChecking cho các provider phổ biến
-    cat <<EOF > "${USER_HOME}/.ssh/config"
+    # [FIX V15.0] Bypass StrictHostKeyChecking cho các provider phổ biến
+    cat <<'EOF' > "${USER_HOME}/.ssh/config"
 Host github.com
     StrictHostKeyChecking no
     User git
@@ -97,8 +104,13 @@ Host bitbucket.org
     StrictHostKeyChecking no
     User git
 EOF
-    chown "$APP_USER":"$APP_USER" "${USER_HOME}/.ssh/config"
+
+    # Bàn giao toàn bộ quyền cho APP_USER
+    chown -R "$APP_USER":"$APP_USER" "${USER_HOME}/.ssh"
+    chmod 600 "${USER_HOME}/.ssh/id_ed25519"
+    chmod 644 "${USER_HOME}/.ssh/id_ed25519.pub"
     chmod 600 "${USER_HOME}/.ssh/config"
+
 
     info "================================================================="
     info "THÀNH CÔNG: KHỞI TẠO HỆ THỐNG HOÀN TẤT."
