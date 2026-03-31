@@ -1,4 +1,4 @@
-# 🚀 VPS Manager CLI - Giải Pháp Quản Trị Laravel Chuyên Nghiệp (V3.0)
+# 🚀 VPS Manager CLI - Giải Pháp Quản Trị Laravel Chuyên Nghiệp
 
 > **Công cụ dòng lệnh (CLI) tinh gọn, bảo mật và mạnh mẽ dành cho việc quản lý các ứng dụng Laravel hiện đại trên hệ điều hành Ubuntu.**
 
@@ -69,7 +69,7 @@ Chạy các lệnh sau tại Terminal của Server:
 
 ```bash
 # 1. Tải bộ mã nguồn từ Repository
-git clone https://github.com/your-username/vps-manager.git vps-manager
+git clone https://github.com/zeo-developer/vps-manager-laravel.git vps-manager
 cd vps-manager
 
 # 2. Cấp quyền thực thi cho các script cài đặt và vận hành
