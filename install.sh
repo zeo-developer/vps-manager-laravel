@@ -5,8 +5,11 @@
 
 set -e
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+# Lấy đường dẫn tuyệt đối của file thực, ngay cả khi được gọi qua symlink
+REAL_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+DIR=$(dirname "$REAL_PATH")
 export SCRIPT_DIR="$DIR"
+
 
 # 0. Khai báo Tiện ích & Màu sắc
 source "$SCRIPT_DIR/modules/utils.sh"
