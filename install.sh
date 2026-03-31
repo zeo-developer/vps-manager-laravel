@@ -34,6 +34,20 @@ else
     source "$SCRIPT_DIR/.env"
 fi
 
+# Tự động sinh mật khẩu MySQL Root nếu chưa có hoặc đang dùng mặc định
+if [ -z "$DB_ROOT_PASSWORD" ] || [ "$DB_ROOT_PASSWORD" = "root_password_secure" ]; then
+    info "Đang tạo mật khẩu Root MySQL ngẫu nhiên siêu bảo mật..."
+    NEW_DB_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 24)
+    # Fix cho file .env (Dùng dấu ngoặc kép bọc pass dẫu có ký tự lạ)
+    sed -i "s/^DB_ROOT_PASSWORD=.*/DB_ROOT_PASSWORD=\"${NEW_DB_PASS}\"/" "$SCRIPT_DIR/.env"
+    export DB_ROOT_PASSWORD="$NEW_DB_PASS"
+    info "--------------------------------------------------------"
+    info "🔑 MẬT KHẨU MYSQL ROOT MỚI: [ ${NEW_DB_PASS} ]"
+    info "(Đã lưu vào file .env cho các lần chạy sau)"
+    info "--------------------------------------------------------"
+fi
+
+
 echo -e "${CYAN}================================================================${NC}"
 echo -e "${CYAN}    CHÀO MỪNG BẠN ĐẾN VỚI TRÌNH CÀI ĐẶT VPS MANAGER (LARAVEL)   ${NC}"
 echo -e "${CYAN}================================================================${NC}"
