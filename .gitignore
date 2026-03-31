@@ -1,0 +1,7 @@
+# VPS Manager - Git Ignore
+.env
+sites/
+storage/logs/*.log
+tmp/
+*.cnf
+.DS_Store
