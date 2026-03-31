@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# modules/deploy.sh
+# Xử lý quy trình Deploy Zero-Downtime & Rollback
+
+BASE_DIR="/var/www/${APP_DOMAIN}"
+RELEASES_DIR="${BASE_DIR}/releases"
+SHARED_DIR="${BASE_DIR}/shared"
+CURRENT_DIR="${BASE_DIR}/current"
+
+run_deploy() {
+    info "Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
+
+    # Kiểm tra/tạo cấu trúc thư mục
+    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage"
+
+    local TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+    local NEW_RELEASE="${RELEASES_DIR}/${TIMESTAMP}"
+
+    # Clone bằng quyền user ứng dụng với SSH Key riêng biệt
+    info "Sử dụng SSH Key riêng biệt: $SSH_KEY_PATH"
+    sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
+        git clone "$GIT_REPO" "$NEW_RELEASE"
+
+    # 2. Xử lý Shared Storage và Env
+    info "Liên kết file .env và thư mục /storage/ ..."
+    # Lần đầu Clone web: Trộn file .env.example của Mã nguồn Laravel với Cấu hình Tốc độ Của Server
+    if [ ! -f "${SHARED_DIR}/.env" ]; then
+        info "Khởi tạo file .env đầu tiên cho Laravel từ thư mục mã nguồn..."
+        if [ -f "${NEW_RELEASE}/.env.example" ]; then
+            cp "${NEW_RELEASE}/.env.example" "${SHARED_DIR}/.env"
+        else
+            touch "${SHARED_DIR}/.env"
+        fi
+        
+        # Tiêm tự động (Inject) Thông số Database và Domain ngầm vào .env của Laravel
+        if [ -f "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}" ]; then
+            source "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
+            
+            sed -i "s|^APP_URL=.*|APP_URL=https://${APP_DOMAIN}|g" "${SHARED_DIR}/.env"
+            sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_NAME}/g" "${SHARED_DIR}/.env"
+            sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USER}/g" "${SHARED_DIR}/.env"
+            sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
+
+            # Đổi môi trường cơ bản thành Production
+            sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
+            sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
+        fi
+        
+        chown "$APP_USER":"$APP_USER" "${SHARED_DIR}/.env"
+        
+        # Bắn Symlink tạm thời để chạy lệnh key:generate cho đợt thả App đầu tiên
+        ln -nfs "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env"
+        info "Đang tạo lập APP_KEY Mã hoá cho Project mới tải về..."
+        cd "${NEW_RELEASE}" && sudo -u "$APP_USER" php artisan key:generate --force || true
+    fi
+    
+    # Xoá storage rỗng của git clone và chèn symlink tới shared/storage
+    rm -rf "${NEW_RELEASE}/storage"
+    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage"
+    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env"
+
+    # 3. Build Dependencies
+    info "Trỏ đến $NEW_RELEASE: Cài đặt Composer Packages..."
+    cd "$NEW_RELEASE"
+    sudo -u "$APP_USER" composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+    
+    info "Cài đặt và Build NPM Packages (Vite)..."
+    sudo -u "$APP_USER" npm install
+    sudo -u "$APP_USER" npm run build
+
+    # 4. Laravel Artisan commands
+    info "Chạy Migrations và Optimizing Caches..."
+    sudo -u "$APP_USER" php artisan migrate --force
+    sudo -u "$APP_USER" php artisan optimize:clear
+    sudo -u "$APP_USER" php artisan config:cache
+    sudo -u "$APP_USER" php artisan route:cache
+    sudo -u "$APP_USER" php artisan view:cache
+
+    # 4.1 Xử lý JWT Secret (Nếu có)
+    if [ "$USE_JWT" = "true" ]; then
+        info "Đang tạo JWT Secret phục vụ xác thực..."
+        sudo -u "$APP_USER" php artisan jwt:secret --force || true
+    fi
+
+    # 4.2 Xử lý Inertia SSR (Nếu có)
+    if [ "$USE_SSR" = "true" ]; then
+        info "Đang Build Inertia SSR..."
+        # Kiểm tra lệnh build ssr trong package.json
+        if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
+            sudo -u "$APP_USER" npm run build:ssr
+        else
+            warn "Không tìm thấy script 'build:ssr', bỏ qua bước build SSR."
+        fi
+    fi
+
+    # 5. Kích hoạt Zero-Downtime Symlink
+    info "Hoán đổi symlink gốc 'current' sang bản Release mới nhất..."
+    sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR"
+    
+    # Restart php-fpm mềm để giải phóng OPcache cũ
+    systemctl reload "php${PHP_VERSION}-fpm"
+    
+    # Restart Laravel Queue workers / SSR
+    info "Khởi động lại các tác vụ Supervisor cho [ ${APP_DOMAIN} ]..."
+    supervisorctl restart "worker-${APP_DOMAIN}:*" || true
+    if [ "$USE_SSR" = "true" ]; then
+        supervisorctl restart "ssr-${APP_DOMAIN}" || true
+    fi
+
+    # 6. Dọn dẹp bản release cũ (giữ lại 3 bản gần nhất)
+    info "Dọn dẹp Releases cũ (Giữ lại 3 bản)..."
+    cd "$RELEASES_DIR"
+    ls -1t | tail -n +4 | xargs -r rm -rf
+
+    info "================================================================="
+    info "TRIỂN KHAI THÀNH CÔNG \n RELEASE MỚI VÀO: $NEW_RELEASE !"
+    info "================================================================="
+    
+    # Móc call API Report (Module monitor)
+    # bash monitor.sh send_telegram "Deploy Thành Công lên release: ${TIMESTAMP}"
+}
+
+run_rollback() {
+    info "Bắt đầu thủ tục Rollback..."
+    cd "$RELEASES_DIR" || error "Không tìm kiếm được thư mục $RELEASES_DIR"
+    
+    # Lấy danh sách release cũ tới mới nhất (có thể chứa 3-5 thư mục)
+    # format ls -1t -> từ mới đến cũ. (dòng số 2 là dòng trước current)
+    local PREV_RELEASE=$(ls -1t | sed -n '2p')
+    
+    if [ -z "$PREV_RELEASE" ]; then
+        error "Không có release lưu trữ trước đó để rollback!"
+    fi
+    
+    local TARGET_ROLLBACK="${RELEASES_DIR}/${PREV_RELEASE}"
+    info "Hạ cấp symlink current về phiên bản: $PREV_RELEASE"
+    
+    sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR"
+    
+    # Xoá views cache để load source cũ an toàn
+    cd "$TARGET_ROLLBACK"
+    sudo -u "$APP_USER" php artisan view:clear || true
+    sudo -u "$APP_USER" php artisan config:clear || true
+    
+    # Restart pool php và supervisor
+    systemctl reload "php${PHP_VERSION}-fpm"
+    supervisorctl restart all || true
+    
+    info "================================================================="
+    info "ĐÃ ROLLBACK (Khôi phục) THÀNH CÔNG VỀ BẢN: $PREV_RELEASE !"
+    info "================================================================="
+}
