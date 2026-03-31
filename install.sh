@@ -3,7 +3,8 @@
 # File Cài đặt Khởi Đầu - Đầu não Hệ thống VPS Manager (One-Click Deploy OS)
 # CHỈ CẦN CHẠY MỘT LẦN DUY NHẤT LÚC MỚI MUA VPS.
 
-set -e
+# set -e (Tạm thời bỏ để theo dõi lỗi cài đặt)
+
 
 # Lấy đường dẫn chuẩn của file thực (Gold Standard for Symlink)
 SOURCE="${BASH_SOURCE[0]}"
