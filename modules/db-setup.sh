@@ -7,16 +7,9 @@ run_db_setup() {
 
     export DEBIAN_FRONTEND="noninteractive"
 
-    # 1. Dọn dẹp MySQL cũ nếu có (Tránh xung đột Port 3306)
-    if dpkg -l | grep -q "mysql-server"; then
-        info "Đang gỡ bỏ MySQL 8 cũ để dọn chỗ cho MariaDB..."
-        apt-get purge -y mysql-server mysql-client mysql-common mysql-server-core-* mysql-client-core-* >/dev/null 2>&1
-        apt-get autoremove -y >/dev/null 2>&1
-        rm -rf /etc/mysql /var/lib/mysql
-    fi
-
     info "Cài đặt gói mariadb-server..."
     apt-get install -y mariadb-server
+
     
     systemctl start mariadb
     systemctl enable mariadb
