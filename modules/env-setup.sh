@@ -9,9 +9,13 @@ run_env_setup() {
     apt-get install -y software-properties-common curl ca-certificates gnupg zip unzip git
 
     # 1. Cài đặt PHP
+    # Đảm bảo có PHP_VERSION mặc định nếu chưa khai báo hoặc bị trống
+    export PHP_VERSION=${PHP_VERSION:-"8.3"}
+    
     info "Thêm PPA ondrej/php và cài đặt PHP $PHP_VERSION..."
     add-apt-repository -y ppa:ondrej/php
     apt-get update -y
+
     
     local php_packages=(
         "php${PHP_VERSION}-cli"

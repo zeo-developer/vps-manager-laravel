@@ -69,11 +69,22 @@ run_system_setup() {
 
     # 7. Tích hợp SSH Keys cho Git
     info "Sinh Deploy Key (Ed25519) dùng cho GitHub/GitLab Deployment..."
-    su - "$APP_USER" -c "if [ ! -f ~/.ssh/id_ed25519 ]; then ssh-keygen -t ed25519 -C \"deploy_${APP_DOMAIN}\" -N '' -f ~/.ssh/id_ed25519 -q; fi"
+    
+    # Tự động dò tìm thư mục Home của APP_USER (Dùng cho cả user thường và www-data)
+    local USER_HOME=$(getent passwd "$APP_USER" | cut -d: -f6)
+    USER_HOME="${USER_HOME:-/home/$APP_USER}"
+    
+    # Đảm bảo thư mục .ssh tồn tại với đúng quyền
+    su - "$APP_USER" -s /bin/bash -c "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
+    
+    if [ ! -f "${USER_HOME}/.ssh/id_ed25519" ]; then
+        info "Đang tạo SSH Key mới tại ${USER_HOME}/.ssh/id_ed25519 ..."
+        ssh-keygen -t ed25519 -C "deploy_vps_manager" -N "" -f "${USER_HOME}/.ssh/id_ed25519" -q
+        chown "$APP_USER":"$APP_USER" "${USER_HOME}/.ssh/id_ed25519" "${USER_HOME}/.ssh/id_ed25519.pub"
+    fi
     
     # Bypass StrictHostKeyChecking cho các provider phổ biến
-    su - "$APP_USER" -c 'mkdir -p ~/.ssh && chmod 700 ~/.ssh'
-    cat <<EOF > "/home/$APP_USER/.ssh/config"
+    cat <<EOF > "${USER_HOME}/.ssh/config"
 Host github.com
     StrictHostKeyChecking no
     User git
@@ -86,14 +97,15 @@ Host bitbucket.org
     StrictHostKeyChecking no
     User git
 EOF
-    chown "$APP_USER":"$APP_USER" "/home/$APP_USER/.ssh/config"
-    chmod 600 "/home/$APP_USER/.ssh/config"
+    chown "$APP_USER":"$APP_USER" "${USER_HOME}/.ssh/config"
+    chmod 600 "${USER_HOME}/.ssh/config"
 
     info "================================================================="
     info "THÀNH CÔNG: KHỞI TẠO HỆ THỐNG HOÀN TẤT."
     info "VUI LÒNG COPY PUBLIC KEY DƯỚI ĐÂY LÊN GITHUB/GITLAB (DEPLOY KEYS):"
     echo -e "${YELLOW}"
-    cat "/home/$APP_USER/.ssh/id_ed25519.pub"
+    cat "${USER_HOME}/.ssh/id_ed25519.pub"
     echo -e "${NC}"
     info "================================================================="
 }
+
