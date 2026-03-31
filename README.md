@@ -26,9 +26,9 @@ Công cụ tập trung vào 3 yếu tố cốt lõi: **Tốc độ (Speed)**, **
 *   **Rollback Tức Thì**: Cho phép khôi phục về phiên bản ổn định gần nhất chỉ trong vài giây nếu bản cập nhật mới gặp sự cố.
 
 ### 🛡️ Bảo Mật & Tối Ưu Hệ Thống (Security & Hardening)
-*   **MySQL Secure Wrapper**: Thực thi các lệnh cơ sở dữ liệu thông qua cấu hình tạm thời, giúp ẩn mật khẩu khỏi danh sách tiến trình hệ thống (`ps aux`).
+*   **MariaDB Secure Wrapper**: Thực thi các lệnh cơ sở dữ liệu thông qua cấu hình tạm thời, giúp ẩn mật khẩu khỏi danh sách tiến trình hệ thống (`ps aux`).
 *   **Harden Permissions**: Tự động thiết lập quyền truy cập `600` cho các tệp tin cấu hình nhạy cảm (`.env`) ngay khi khởi tạo.
-*   **Fail2ban & Brute-force Shield**: Tích hợp sẵn các bộ lọc bảo vệ cổng SSH (22) và MySQL (3306), tự động chặn các địa chỉ IP có hành vi tấn công.
+*   **Fail2ban & Brute-force Shield**: Tích hợp sẵn các bộ lọc bảo vệ cổng SSH (22) và Database (3306), tự động chặn các địa chỉ IP có hành vi tấn công.
 *   **Nginx Security Optimization**: Cấu hình Nginx được tinh chỉnh sẵn với Gzip, Cache và các thông số bảo mật chuẩn A+.
 
 ---

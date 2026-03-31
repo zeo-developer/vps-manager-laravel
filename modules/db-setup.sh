@@ -3,34 +3,42 @@
 # Quản trị MySQL Server (Global), Cấu hình cron Backup tự động Multi-Site quét file Env
 
 run_db_setup() {
-    info "Bắt đầu thiết lập Máy chủ CSDT MySQL 8 Global..."
+    info "Bắt đầu thiết lập Máy chủ CSDL MariaDB (Thay thế MySQL)..."
 
     export DEBIAN_FRONTEND="noninteractive"
 
-    info "Cài đặt gói mysql-server..."
-    apt-get install -y mysql-server
-    
-    systemctl start mysql
-    systemctl enable mysql
+    # 1. Dọn dẹp MySQL cũ nếu có (Tránh xung đột Port 3306)
+    if dpkg -l | grep -q "mysql-server"; then
+        info "Đang gỡ bỏ MySQL 8 cũ để dọn chỗ cho MariaDB..."
+        apt-get purge -y mysql-server mysql-client mysql-common mysql-server-core-* mysql-client-core-* >/dev/null 2>&1
+        apt-get autoremove -y >/dev/null 2>&1
+        rm -rf /etc/mysql /var/lib/mysql
+    fi
 
-    # Thiết lập mật khẩu Root MySQL nếu chưa có (Dùng cho Tool quản trị)
-    info "Đang thiết lập bảo mật và mật khẩu Root cho MySQL..."
+    info "Cài đặt gói mariadb-server..."
+    apt-get install -y mariadb-server
     
-    # 1. Thử vào thẳng bằng sudo (Cơ chế auth_socket mặc định của Ubuntu)
+    systemctl start mariadb
+    systemctl enable mariadb
+
+    # Thiết lập mật khẩu Root (Dùng cho Tool quản trị)
+    info "Đang thiết lập bảo mật và mật khẩu Root cho MariaDB..."
+    
+    # MariaDB cho phép sudo mysql mặc định
     if sudo mysql -e "SELECT 1;" >/dev/null 2>&1; then
-        info "Đồng bộ mật khẩu Root MySQL với file .env bằng quyền sudo..."
-        # Sử dụng dấu ngoặc kép bọc mật khẩu để tránh lỗi ký tự lạ
-        sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
+        info "Đồng bộ mật khẩu Root MariaDB với file .env..."
+        sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';"
         sudo mysql -e "FLUSH PRIVILEGES;"
     else
-        # 2. Nếu sudo không pass (đã đặt pass từ trước), thử bằng chính pass trong .env
-        if sudo mysql --user=root --password="${DB_ROOT_PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
-            info "Mật khẩu Root MySQL đã được thiết lập đúng từ trước, bỏ qua bước đổi mật khẩu."
+        # Nếu đã đặt rồi thì thử bằng pass
+        if mysql --user=root --password="${DB_ROOT_PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
+            info "Mật khẩu Root MariaDB đã được thiết lập đúng từ trước."
         else
-            error "Không thể truy cập MySQL để thiết lập mật khẩu. Vui lòng kiểm tra dịch vụ MySQL hoặc mật khẩu cũ."
+            error "Không thể truy cập MariaDB để thiết lập mật khẩu."
         fi
     fi
-    info "Mật khẩu Root MySQL đã được đồng bộ chuẩn với file .env."
+    info "Mật khẩu Root MariaDB đã được đồng bộ chuẩn với file .env."
+
 
 
 

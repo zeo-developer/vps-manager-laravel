@@ -35,7 +35,7 @@ change_db_password() {
 
     info "Đang thay đổi mật khẩu Database cho User ${DB_USER}..."
     
-    # 1. Đổi trên MySQL
+    # 1. Đổi trên cơ sở dữ liệu
     if run_mysql_secure "ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${new_pass}';"; then
         # Nếu có user remote (%) hoặc IP cụ thể thì cố gắng đổi luôn
         run_mysql_secure "ALTER USER '${DB_USER}'@'%' IDENTIFIED BY '${new_pass}';" || true
@@ -44,7 +44,7 @@ change_db_password() {
         # 2. Cập nhật sites/.env.domain (VPS Tool)
         sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=\"${new_pass}\"/" "$SITE_ENV"
         
-        # 3. Cập nhật /var/www/domain/shared/.env (Laravel App)
+        # 3. Cập nhật /var/www/${domain}/shared/.env (Laravel App)
         local shared_env="/var/www/${domain}/shared/.env"
         if [ -f "$shared_env" ]; then
             sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${new_pass}/" "$shared_env"
@@ -60,8 +60,9 @@ change_db_password() {
         info "Mật khẩu : ${new_pass}"
         info "================================================================="
     else
-        error "Có lỗi xảy ra khi đổi mật khẩu MySQL."
+        error "Có lỗi xảy ra khi đổi mật khẩu Database."
     fi
+
 }
 
 enable_remote_db() {
@@ -71,13 +72,26 @@ enable_remote_db() {
 
     info "Đang kích hoạt tính năng Remote Database cho ${domain}..."
 
-    # 1. Sửa bind-address mysql (Chỉ làm 1 lần)
+    # 1. Sửa bind-address (Hỗ trợ cả MySQL và MariaDB)
     local mysql_conf="/etc/mysql/mysql.conf.d/mysqld.cnf"
-    if grep -q "bind-address\s*=\s*127.0.0.1" "$mysql_conf"; then
-        sed -i "s/bind-address\s*=\s*127.0.0.1/bind-address = 0.0.0.0/" "$mysql_conf"
-        systemctl restart mysql
-        info "Đã cấu hình MySQL lắng nghe mọi Interface (0.0.0.0)."
+    local mariadb_conf="/etc/mysql/mariadb.conf.d/50-server.cnf"
+    local target_conf=""
+
+    if [ -f "$mariadb_conf" ]; then
+        target_conf="$mariadb_conf"
+    elif [ -f "$mysql_conf" ]; then
+        target_conf="$mysql_conf"
     fi
+
+    if [ ! -z "$target_conf" ]; then
+        if grep -q "bind-address\s*=\s*127.0.0.1" "$target_conf"; then
+            sed -i "s/bind-address\s*=\s*127.0.0.1/bind-address = 0.0.0.0/" "$target_conf"
+            # Khởi động lại dịch vụ tương ứng
+            systemctl restart mariadb 2>/dev/null || systemctl restart mysql
+            info "Đã cấu hình Database lắng nghe mọi Interface (0.0.0.0) tại $target_conf."
+        fi
+    fi
+
 
     echo -e "Chọn phạm vi cho phép kết nối Remote:"
     echo -e "  ${GREEN}1.${NC} Chỉ một IP duy nhất (An toàn nhất)"
