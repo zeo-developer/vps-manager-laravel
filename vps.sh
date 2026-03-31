@@ -3,7 +3,8 @@
 # File chạy chính - VPS Manager (Multi-Site Version)
 # Khuyến nghị chạy bằng `sudo ./vps.sh` khi thao tác System/Env/DB
 
-set -e
+# set -e (Đã gỡ bỏ để duy trì Menu chính khi có lỗi)
+
 
 # Lấy đường dẫn chuẩn của file thực (Gold Standard for Symlink)
 SOURCE="${BASH_SOURCE[0]}"
