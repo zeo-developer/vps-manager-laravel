@@ -7,28 +7,35 @@ run_system_setup() {
 
     # 1. Update OS
     info "Cập nhật các gói phần mềm (apt update & upgrade)..."
-    apt-get update -y && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
+    export NEEDRESTART_MODE=a
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -y -q
+    apt-get upgrade -y -q -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 
-    # 2. Tạo User & Phân quyền sudo
+
     if ! id -u "$APP_USER" >/dev/null 2>&1; then
         info "Đang tạo user ứng dụng: $APP_USER"
         useradd -m -s /bin/bash "$APP_USER"
         
-        # Cấp quyền sudo không cần mật khẩu cho user ứng dụng (có thể bật/tắt tuỳ chính sách)
+        # Cấp quyền sudo không cần mật khẩu
         echo "$APP_USER ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/$APP_USER"
         chmod 0440 "/etc/sudoers.d/$APP_USER"
-    else
-        warn "User $APP_USER đã tồn tại, tiếp tục..."
     fi
 
-    # 3. Bảo mật SSH (Disable Password Auth & Root Login)
-    info "Cấu hình bảo mật SSH..."
+
     sed -i -e 's/#PasswordAuthentication yes/PasswordAuthentication no/g' \
            -e 's/PasswordAuthentication yes/PasswordAuthentication no/g' \
            -e 's/#PermitRootLogin prohibit-password/PermitRootLogin no/g' \
            -e 's/PermitRootLogin yes/PermitRootLogin no/g' \
            /etc/ssh/sshd_config || true
-    systemctl restart sshd
+           
+    # Cố gắng restart cả ssh (Ubuntu chính) và sshd (bí danh/khác)
+    if systemctl list-units --full -all | grep -Fq 'ssh.service'; then
+        systemctl restart ssh
+    elif systemctl list-units --full -all | grep -Fq 'sshd.service'; then
+        systemctl restart sshd
+    fi
+
 
     # 4. Định cấu hình UFW (Firewall)
     info "Thiết lập UFW Firewall (Mở cổng: $UFW_ALLOW_PORTS)..."
