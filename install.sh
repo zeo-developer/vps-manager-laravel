@@ -5,10 +5,16 @@
 
 set -e
 
-# Lấy đường dẫn tuyệt đối của file thực, ngay cả khi được gọi qua symlink
-REAL_PATH=$(readlink -f "${BASH_SOURCE[0]}")
-DIR=$(dirname "$REAL_PATH")
+# Lấy đường dẫn chuẩn của file thực (Gold Standard for Symlink)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 export SCRIPT_DIR="$DIR"
+
 
 
 # 0. Khai báo Tiện ích & Màu sắc
