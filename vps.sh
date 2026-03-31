@@ -15,17 +15,12 @@ done
 DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 export SCRIPT_DIR="$DIR"
 
-
-
 # 1. Khai báo Tiện ích & Màu sắc
 if [ ! -f "$SCRIPT_DIR/modules/utils.sh" ]; then
     echo -e "\033[0;31m[ERROR]\033[0m Không tìm thấy bộ tiện ích (utils.sh) tại: $SCRIPT_DIR/modules/utils.sh"
-    echo -e "Vui lòng kiểm tra lại quá trình cài đặt hoặc vị trí của script."
     exit 1
 fi
 source "$SCRIPT_DIR/modules/utils.sh"
-
-
 require_root() {
     if [ "$EUID" -ne 0 ]; then
         error "Tính năng này cần quyền root (sudo). Vui lòng thử lại: sudo ./vps.sh"

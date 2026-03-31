@@ -15,8 +15,6 @@ done
 DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 export SCRIPT_DIR="$DIR"
 
-
-
 # 0. Khai báo Tiện ích & Màu sắc
 source "$SCRIPT_DIR/modules/utils.sh"
 

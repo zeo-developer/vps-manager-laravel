@@ -134,11 +134,8 @@ Mỗi domain có một file cấu hình riêng, cho phép anh thay đổi:
 
 ## 💡 8. Mẹo & Ghi Chú Vận Hành (Operational Tips)
 
-
-
-
-
 *   **Quản lý SSH Key**: Người dùng có thể xem lại mã SSH Public Key bất cứ lúc nào thông qua chức năng số **6 (Site Info)**.
+
 *   **Truy cập Database từ xa**: Chức năng số **8** cho phép giới hạn quyền truy cập MySQL từ xa theo địa chỉ IP cụ thể để đảm bảo an ninh.
 *   **Giám sát Logs**: Chức năng số **9** cung cấp trình xem log thời gian thực từ Laravel hoặc Nginx giúp xử lý sự cố nhanh chóng.
 
