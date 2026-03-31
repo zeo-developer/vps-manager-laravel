@@ -51,15 +51,18 @@ run_mysql_secure() {
     local tmp_cnf="/tmp/.vps_mysql_$RANDOM.cnf"
     
     # Tạo cấu hình tạm
-    cat > "$tmp_cnf" <<EOF
+    cat > "$tmp_cnf" <<'EOF'
 [client]
 user=root
 password="${DB_ROOT_PASSWORD}"
 EOF
+    # Inject giá trị thực của biến vào file (Cách này an toàn hơn <<EOF trực tiếp khi có ký tự lạ)
+    sed -i "s/\${DB_ROOT_PASSWORD}/${DB_ROOT_PASSWORD}/g" "$tmp_cnf"
     chmod 600 "$tmp_cnf"
     
-    # Thực thi (Không in lỗi pass ra console)
-    mysql --defaults-extra-file="$tmp_cnf" -e "$query" 2>/dev/null
+    # Thực thi (Dùng sudo để chắc chắn có quyền truy cập socket)
+    sudo mysql --defaults-extra-file="$tmp_cnf" -e "$query"
+
     
     # Dọn dẹp
     rm -f "$tmp_cnf"

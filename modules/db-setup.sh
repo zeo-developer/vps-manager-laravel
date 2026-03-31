@@ -19,17 +19,19 @@ run_db_setup() {
     # 1. Thử vào thẳng bằng sudo (Cơ chế auth_socket mặc định của Ubuntu)
     if sudo mysql -e "SELECT 1;" >/dev/null 2>&1; then
         info "Đồng bộ mật khẩu Root MySQL với file .env bằng quyền sudo..."
+        # Sử dụng dấu ngoặc kép bọc mật khẩu để tránh lỗi ký tự lạ
         sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
         sudo mysql -e "FLUSH PRIVILEGES;"
     else
-        # 2. Nếu sudo thất bại, thử bằng pass hiện có trong .env (Trường hợp chạy lại lần 2)
-        if mysql --user=root --password="${DB_ROOT_PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
+        # 2. Nếu sudo không pass (đã đặt pass từ trước), thử bằng chính pass trong .env
+        if sudo mysql --user=root --password="${DB_ROOT_PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
             info "Mật khẩu Root MySQL đã được thiết lập đúng từ trước, bỏ qua bước đổi mật khẩu."
         else
-            error "Không thể truy cập MySQL để thiết lập mật khẩu. Vui lòng kiểm tra dịch vụ MySQL."
+            error "Không thể truy cập MySQL để thiết lập mật khẩu. Vui lòng kiểm tra dịch vụ MySQL hoặc mật khẩu cũ."
         fi
     fi
-    info "Mật khẩu Root MySQL đã được đồng bộ với file .env."
+    info "Mật khẩu Root MySQL đã được đồng bộ chuẩn với file .env."
+
 
 
     # Setup thư mục backup data dùng chung cho Loop quét DB Backup 
