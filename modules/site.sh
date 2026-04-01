@@ -163,6 +163,7 @@ run_add_site() {
     cat "$SCRIPT_DIR/configs/supervisor-queue.conf" \
         | sed "s/{{APP_DOMAIN}}/$domain/g" \
         | sed "s/{{APP_USER}}/$app_user/g" \
+        | sed "s/{{PHP_VERSION}}/$php_ver/g" \
         | sed "s/laravel-worker/worker-${domain}/g" \
         > "$supervisor_conf"
 
@@ -173,6 +174,7 @@ run_add_site() {
         cat "$SCRIPT_DIR/configs/supervisor-ssr.conf" \
             | sed "s/{{APP_DOMAIN}}/$domain/g" \
             | sed "s/{{APP_USER}}/$app_user/g" \
+            | sed "s/{{PHP_VERSION}}/$php_ver/g" \
             | sed "s/{{SSR_PORT}}/$ssr_port/g" \
             > "$ssr_supervisor_conf"
     fi
