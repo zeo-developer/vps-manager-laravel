@@ -5,6 +5,13 @@
 # Các biến đường dẫn sẽ được khởi tạo động bên trong hàm run_deploy
 
 run_deploy() {
+    # [FIX V31.0] Kiểm tra Website có tồn tại thật hay không (Dựa trên file env của site)
+    local SITE_ENV_FILE="$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
+    if [ ! -f "$SITE_ENV_FILE" ]; then
+        error "❌ Lỗi: Website [ ${APP_DOMAIN} ] chưa được khởi tạo. Vui lòng sử dụng lệnh 'vps add-site' trước!"
+        return 1
+    fi
+
     info "Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
 
     # [FIX V18.2] Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
@@ -13,10 +20,7 @@ run_deploy() {
     local SHARED_DIR="${BASE_DIR}/shared"
     local CURRENT_DIR="${BASE_DIR}/current"
 
-    # [FIX V18.2] Đảm bảo quyền sở hữu cho APP_USER trước khi làm việc
-    if [ ! -d "$BASE_DIR" ]; then
-        mkdir -p "$BASE_DIR"
-    fi
+    # [FIX V18.2] Đảm bảo quyền sở hữu cho APP_USER
     chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
 
     # [FIX V26.0] Kiểm tra và Hỏi Git Repo nếu chưa có
