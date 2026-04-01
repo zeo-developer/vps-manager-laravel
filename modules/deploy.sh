@@ -185,7 +185,6 @@ run_deploy() {
     info "Chạy Migrations và Optimizing Caches..."
     if [ -f "artisan" ]; then
         sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
-
         sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
         sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
         sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache || { cleanup_failed_release; error "Lỗi khi cache route"; return 1; }
@@ -328,11 +327,11 @@ run_rollback() {
     info "Đang khôi phục symlink current về phiên bản ổn định: $PREV_RELEASE_NAME..."
     sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR" || { error "Không thể hoán đổi symlink"; return 1; }
 
-    # [FIX V30.1] Gắn nhãn bản lỗi để tránh bốc nhầm ở lần sau
+    # [FIX V30.8] Xóa bỏ hoàn toàn bản release lỗi để dọn dẹp hệ thống
     if [ -d "$CURRENT_FAILED_RELEASE" ]; then
-        cd "$RELEASES_DIR"
-        mv "$CURRENT_FAILED_RELEASE_NAME" "${CURRENT_FAILED_RELEASE_NAME}_FAILED"
-        warn "Bản lỗi đã được gắn nhãn: ${CURRENT_FAILED_RELEASE_NAME}_FAILED (Sau 3 lần deploy mới nó sẽ tự bị xóa)."
+        info "Đang xóa bỏ bản release lỗi vừa rồi để dọn dẹp hệ thống..."
+        rm -rf "$CURRENT_FAILED_RELEASE"
+        info "✅ Đã xóa sạch bản lỗi. (Log vẫn còn trong shared/storage/logs/)."
     fi
     
     # Xoá views cache để load source cũ an toàn
