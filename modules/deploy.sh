@@ -65,8 +65,8 @@ run_deploy() {
         done
     fi
 
-    # Kiểm tra/tạo cấu trúc thư mục
-    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage" || { error "Không thể tạo cấu trúc thư mục releases/shared"; return 1; }
+    # [FIX V27.0] Đảm bảo toàn bộ cấu trúc storage (đặc biệt là logs) tồn tại cho Supervisor
+    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage/"{logs,app,framework/views,framework/cache,framework/sessions} || { error "Không thể tạo cấu trúc thư mục releases/shared"; return 1; }
     chown -R "$APP_USER":"$APP_USER" "${RELEASES_DIR}" "${SHARED_DIR}"
 
     local TIMESTAMP=$(date +"%Y%m%d%H%M%S")

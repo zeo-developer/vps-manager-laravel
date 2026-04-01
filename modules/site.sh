@@ -121,12 +121,9 @@ run_add_site() {
 
     mkdir -p "$target_dir/current/public"
     
-    # [FIX V20.1] Khởi tạo cấu trúc Shared Storage để Laravel/Supervisor Log hoạt động ngay
+    # [FIX V27.0] Khởi tạo cấu trúc đầy đủ để Supervisor Log không bị lỗi CANT_REREAD
     info "Khởi tạo cấu trúc Shared Storage (Logs, Cache, Sessions)..."
-    mkdir -p "$target_dir/shared/storage/logs"
-    mkdir -p "$target_dir/shared/storage/framework/cache"
-    mkdir -p "$target_dir/shared/storage/framework/sessions"
-    mkdir -p "$target_dir/shared/storage/framework/views"
+    mkdir -p "$target_dir/shared/storage/"{logs,app,framework/views,framework/cache,framework/sessions}
     
     # Khéo léo trả cái index.html vắn tắt để certbot nhận diện pass challenge nhanh
     echo "<h1>${domain} đang được setup bởi VPS Manager CLI...</h1>" > "$target_dir/current/public/index.html"
