@@ -10,7 +10,30 @@ CURRENT_DIR="${BASE_DIR}/current"
 run_deploy() {
     info "Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
 
+    # [FIX V17.0] Kiểm tra và Hỏi Git Repo nếu chưa có
+    if [ -z "$GIT_REPO" ] || [ "$GIT_REPO" = "git_repo_url" ]; then
+        info "⚠️ Cần cấu hình Git Repository cho website [ ${APP_DOMAIN} ]."
+        while true; do
+            read -p "Nhập Git Repo URL (vd: git@github.com:user/repo.git): " input_repo
+            if [[ "$input_repo" =~ ^git@ || "$input_repo" =~ ^https:// ]]; then
+                GIT_REPO="$input_repo"
+                local site_env_file="$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
+                # Cập nhật hoặc Thêm mới dòng GIT_REPO
+                if grep -q "^GIT_REPO=" "$site_env_file"; then
+                    sed -i "s|^GIT_REPO=.*|GIT_REPO=\"${GIT_REPO}\"|g" "$site_env_file"
+                else
+                    echo "GIT_REPO=\"${GIT_REPO}\"" >> "$site_env_file"
+                fi
+                info "✅ Đã lưu Git Repo: ${GIT_REPO}"
+                break
+            else
+                warn "❌ Định dạng URL không hợp lệ! Vui lòng bắt đầu bằng 'git@' hoặc 'https://'."
+            fi
+        done
+    fi
+
     # Kiểm tra/tạo cấu trúc thư mục
+
     mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage"
 
     local TIMESTAMP=$(date +"%Y%m%d%H%M%S")
