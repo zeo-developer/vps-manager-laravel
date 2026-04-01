@@ -185,6 +185,7 @@ run_deploy() {
     info "Chạy Migrations và Optimizing Caches..."
     if [ -f "artisan" ]; then
         sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
+
         sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
         sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
         sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache || { cleanup_failed_release; error "Lỗi khi cache route"; return 1; }
@@ -297,14 +298,33 @@ run_rollback() {
     local TARGET_ROLLBACK="${RELEASES_DIR}/${PREV_RELEASE_NAME}"
     local CURRENT_FAILED_RELEASE="${RELEASES_DIR}/${CURRENT_FAILED_RELEASE_NAME}"
 
-    # [FIX V30.2] Cố gắng lùi lại Database (Migration Rollback - Batch gần nhất)
-    # LƯU Ý: Việc này sẽ xóa cột/bảng mới vừa được tạo ở bản deploy lỗi.
-    if [ -f "${CURRENT_FAILED_RELEASE}/artisan" ]; then
-        info "Đang khôi phục cấu trúc Database (Rollback Last Migration Batch)..."
-        warn "🛡️ CẨN TRỌNG: Mọi dữ liệu ở cấu trúc DB mới (nếu có) sẽ bị xóa sạch!"
-        cd "$CURRENT_FAILED_RELEASE" && sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate:rollback --force || warn "⚠️ Không thể rollback database tự động. Anh hãy kiểm tra thủ công!"
+    # [FIX V30.4] Kiểm tra & Hỏi xác nhận Rollback Database Thủ công
+    echo ""
+    warn "=========================================================================="
+    warn "⚠️  CẢNH BÁO QUAN TRỌNG VỀ DATABASE (DỮ LIỆU)  ⚠️"
+    warn "=========================================================================="
+    warn "Việc Rollback sẽ lùi cấu trúc Database về trạng thái cũ."
+    warn "🔴 Hậu quả: Dữ liệu ở các cột/bảng mới vừa được tạo sẽ bị XÓA SẠCH VĨNH VIỄN!"
+    warn "🔴 Lời khuyên: CHỈ chọn 'y' nếu anh chắc chắn code cũ không thể chạy được"
+    warn "               với cấu trúc database hiện tại; hoặc database không có"
+    warn "               thay đổi gì ở phiên bản vừa release (Tool sẽ tự bảo vệ)."
+    warn "=========================================================================="
+    
+    # Mặc định là Không (y/N)
+    read -p "Anh có muốn khôi phục cấu trúc Database (Rollback Migrations) không? (y/N): " confirm_db
+    
+    if [[ "$confirm_db" =~ ^[Yy]$ ]]; then
+        if [ -f "${CURRENT_FAILED_RELEASE}/artisan" ]; then
+            info "Hành động được xác nhận. Đang tiến hành khôi phục cấu trúc Database..."
+            cd "$CURRENT_FAILED_RELEASE" && sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate:rollback --force || warn "⚠️ Không thể rollback database tự động. Anh hãy kiểm tra thủ công!"
+        else
+            warn "⚠️ Không tìm thấy file artisan trong bản lỗi để thực hiện Rollback DB."
+        fi
+    else
+        info "🛡️ Đã bỏ qua bước Rollback Database theo yêu cầu. 🏆"
     fi
 
+    # Tiếp tục rollback phần Code (Symlink)
     info "Đang khôi phục symlink current về phiên bản ổn định: $PREV_RELEASE_NAME..."
     sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR" || { error "Không thể hoán đổi symlink"; return 1; }
 
