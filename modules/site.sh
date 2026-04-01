@@ -73,14 +73,30 @@ run_add_site() {
     sed -i "s/^SSR_PORT=.*/SSR_PORT=\"${ssr_port}\"/" "$SITE_ENV"
 
     # 1.3 Sinh SSH Key độc lập (Multi-Git Support)
-    local ssh_key_dir="/root/.ssh/vps_manager"
-    mkdir -p "$ssh_key_dir"
+    # [FIX V22.0] Di dời Key ra khỏi /root để www-data có thể đọc được
+    local ssh_key_dir="/var/www/.vps_keys"
+    local app_user=${APP_USER:-"www-data"}
     local ssh_key_path="${ssh_key_dir}/id_ed25519_${domain}"
+
+    mkdir -p "$ssh_key_dir"
+    chown "$app_user":"$app_user" "$ssh_key_dir"
+    chmod 700 "$ssh_key_dir"
+    
     if [ ! -f "$ssh_key_path" ]; then
         info "Đang khởi tạo mã SSH Key riêng biệt cho [ $domain ]..."
         ssh-keygen -t ed25519 -f "$ssh_key_path" -N "" -q -C "deploy_${domain}"
-        ssh-keyscan github.com >> /root/.ssh/known_hosts 2>/dev/null
     fi
+
+    # Cấp quyền sở hữu và bảo mật cho Key
+    chown "$app_user":"$app_user" "$ssh_key_path"*
+    chmod 600 "$ssh_key_path"
+    chmod 644 "${ssh_key_path}.pub"
+
+    # Đảm bảo github.com có trong known_hosts của hệ thống (cho mọi user)
+    if ! grep -q "github.com" /etc/ssh/ssh_known_hosts 2>/dev/null; then
+        ssh-keyscan github.com >> /etc/ssh/ssh_known_hosts 2>/dev/null
+    fi
+
     sed -i "s|^SSH_KEY_PATH=.*|SSH_KEY_PATH=\"${ssh_key_path}\"|g" "$SITE_ENV"
     harden_permissions "$SITE_ENV"
 
