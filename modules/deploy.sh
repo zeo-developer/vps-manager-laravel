@@ -243,8 +243,27 @@ run_deploy() {
 }
 
 run_rollback() {
-    info "Bắt đầu thủ tục Rollback..."
-    cd "$RELEASES_DIR" || error "Không tìm kiếm được thư mục $RELEASES_DIR"
+    # [FIX V30.0] Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
+    local BASE_DIR="/var/www/${APP_DOMAIN}"
+    local RELEASES_DIR="${BASE_DIR}/releases"
+    local CURRENT_DIR="${BASE_DIR}/current"
+    local SITE_ENV_FILE="$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
+
+    # Kiểm tra Website có tồn tại thật hay không
+    if [ ! -d "$BASE_DIR" ] || [ ! -f "$SITE_ENV_FILE" ]; then
+        error "❌ Lỗi: Website [ ${APP_DOMAIN} ] không tồn tại hoặc chưa được cấu hình!"
+        return 1
+    fi
+
+    info "Bắt đầu thủ tục Rollback cho [ ${APP_DOMAIN} ]..."
+
+    # Kiểm tra thư mục releases
+    if [ ! -d "$RELEASES_DIR" ]; then
+        error "❌ Lỗi: Thư mục releases không tồn tại. Chưa có bản deploy nào để rollback!"
+        return 1
+    fi
+
+    cd "$RELEASES_DIR" || { error "Không tìm kiếm được thư mục $RELEASES_DIR"; return 1; }
     
     # Lấy danh sách release cũ tới mới nhất (có thể chứa 3-5 thư mục)
     # format ls -1t -> từ mới đến cũ. (dòng số 2 là dòng trước current)
