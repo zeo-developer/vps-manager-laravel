@@ -212,6 +212,13 @@ run_deploy() {
 
     # 5. Kích hoạt Zero-Downtime Symlink
     info "Hoán đổi symlink gốc 'current' sang bản Release mới nhất..."
+    
+    # [FIX V31.2] Nếu 'current' là thư mục thật (nháp từ add-site), phải xóa để ln tạo được symlink chuẩn
+    if [ -d "$CURRENT_DIR" ] && [ ! -L "$CURRENT_DIR" ]; then
+        warn "Dọn dẹp thư mục nháp 'current' để khởi tạo cấu trúc Zero-Downtime Symlink..."
+        rm -rf "$CURRENT_DIR"
+    fi
+
     sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR" || { cleanup_failed_release; error "Không thể hoán đổi symlink current"; return 1; }
     
     # Restart php-fpm mềm để giải phóng OPcache cũ
