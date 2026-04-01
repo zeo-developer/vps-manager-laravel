@@ -42,17 +42,25 @@ run_deploy() {
     fi
 
     # Kiểm tra/tạo cấu trúc thư mục
-    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage" || error "Không thể tạo cấu trúc thư mục releases/shared"
+    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage" || { error "Không thể tạo cấu trúc thư mục releases/shared"; return 1; }
     chown -R "$APP_USER":"$APP_USER" "${RELEASES_DIR}" "${SHARED_DIR}"
 
     local TIMESTAMP=$(date +"%Y%m%d%H%M%S")
     local NEW_RELEASE="${RELEASES_DIR}/${TIMESTAMP}"
 
+    # [FIX V25.1] Hàm dọn dẹp nội bộ nếu quy trình build thất bại
+    cleanup_failed_release() {
+        if [ -d "$NEW_RELEASE" ]; then
+            warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
+            rm -rf "$NEW_RELEASE"
+        fi
+    }
+
     # Clone bằng quyền user ứng dụng với SSH Key riêng biệt
     info "Sử dụng SSH Key riêng biệt: $SSH_KEY_PATH"
     # [FIX V18.2] Cho phép hiển thị lỗi git clone để dễ debug
     sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
-        git clone "$GIT_REPO" "$NEW_RELEASE" || error "Lỗi: Không thể clone mã nguồn từ Git!"
+        git clone "$GIT_REPO" "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi: Không thể clone mã nguồn từ Git!"; return 1; }
 
     # 2. Xử lý Shared Storage và Env
     info "Liên kết file .env và thư mục /storage/ ..."
@@ -87,11 +95,11 @@ run_deploy() {
     
     # Xoá storage rỗng của git clone và chèn symlink tới shared/storage
     rm -rf "${NEW_RELEASE}/storage"
-    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage" || error "Không thể tạo symlink cho storage"
+    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage" || { cleanup_failed_release; error "Không thể tạo symlink cho storage"; return 1; }
     
     # [FIX V24.1] Đảm bảo xoá file .env cũ trong source (nếu có) trước khi link
     rm -f "${NEW_RELEASE}/.env"
-    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env" || error "Không thể tạo symlink cho .env"
+    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env" || { cleanup_failed_release; error "Không thể tạo symlink cho .env"; return 1; }
 
     # 3. Build Dependencies
     info "Trỏ đến $NEW_RELEASE: Cài đặt Composer Packages (Sử dụng PHP ${PHP_VERSION})..."
@@ -99,7 +107,7 @@ run_deploy() {
     
     # [FIX V24.1] Ép chạy Composer bằng phiên bản PHP của dự án
     if [ -f "composer.json" ]; then
-        sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || error "Lỗi khi chạy composer install"
+        sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || { cleanup_failed_release; error "Lỗi khi chạy composer install"; return 1; }
     fi
 
     # [FIX V24.1] Di dời key:generate xuống sau khi đã có vendor/
@@ -107,7 +115,7 @@ run_deploy() {
         # Kiểm tra nếu chưa có APP_KEY trong .env thì mới tạo
         if ! grep -q "APP_KEY=base64:" "${SHARED_DIR}/.env"; then
             info "Tạo APP_KEY cho dự án mới..."
-            sudo -u "$APP_USER" php${PHP_VERSION} artisan key:generate --force
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan key:generate --force || { cleanup_failed_release; error "Lỗi khi tạo APP_KEY"; return 1; }
         fi
     fi
     
@@ -118,18 +126,18 @@ run_deploy() {
     # Kiểm tra file package.json trước khi chạy npm
     if [ -f "package.json" ]; then
         info "Cài đặt và Build NPM Packages (Vite)..."
-        sudo -u "$APP_USER" npm install || error "Lỗi khi chạy npm install"
-        sudo -u "$APP_USER" npm run build || error "Lỗi khi chạy npm run build"
+        sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
+        sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
     fi
 
     # 4. Laravel Artisan commands (Sử dụng PHP ${PHP_VERSION})
     info "Chạy Migrations và Optimizing Caches..."
     if [ -f "artisan" ]; then
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache || { cleanup_failed_release; error "Lỗi khi cache route"; return 1; }
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache || { cleanup_failed_release; error "Lỗi khi cache view"; return 1; }
     else
         warn "⚠️ Không tìm thấy file 'artisan', bỏ qua các lệnh Laravel."
     fi
@@ -145,7 +153,7 @@ run_deploy() {
         info "Đang Build Inertia SSR..."
         # Kiểm tra lệnh build ssr trong package.json
         if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
-            sudo -u "$APP_USER" npm run build:ssr
+            sudo -u "$APP_USER" npm run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
         else
             warn "Không tìm thấy script 'build:ssr', bỏ qua bước build SSR."
         fi
@@ -153,7 +161,7 @@ run_deploy() {
 
     # 5. Kích hoạt Zero-Downtime Symlink
     info "Hoán đổi symlink gốc 'current' sang bản Release mới nhất..."
-    sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR"
+    sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR" || { cleanup_failed_release; error "Không thể hoán đổi symlink current"; return 1; }
     
     # Restart php-fpm mềm để giải phóng OPcache cũ
     systemctl reload "php${PHP_VERSION}-fpm"
