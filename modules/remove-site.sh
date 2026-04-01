@@ -59,7 +59,11 @@ run_remove_site() {
     # 5. Xóa Files và Config
     info "Xóa sạch Web Directory & File Cấu hình..."
     rm -rf "/var/www/$domain"
-    rm -f "$SCRIPT_DIR/sites/.env.${domain}"
+    rm -f "$SITE_ENV"
+
+    # 6. Xóa SSH Key riêng biệt
+    info "Gỡ bỏ SSH Key của dự án..."
+    rm -f "/var/www/.vps_keys/id_ed25519_${domain}"*
 
     info "================================================================="
     info "💀 THÀNH CÔNG: DỰ ÁN [ $domain ] ĐÃ BỊ XOÁ BỎ HOÀN TOÀN TỪ SERVER."
