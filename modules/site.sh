@@ -166,6 +166,7 @@ run_add_site() {
         | sed "s/{{PHP_VERSION}}/$php_ver/g" \
         | sed "s/laravel-worker/worker-${domain}/g" \
         > "$supervisor_conf"
+    chmod 644 "$supervisor_conf"
 
     # 5.1 Cài SSR Supervisor (Nếu có - Chỉ tạo cấu hình)
     if [ "$use_ssr" = "true" ]; then
@@ -177,6 +178,7 @@ run_add_site() {
             | sed "s/{{PHP_VERSION}}/$php_ver/g" \
             | sed "s/{{SSR_PORT}}/$ssr_port/g" \
             > "$ssr_supervisor_conf"
+        chmod 644 "$ssr_supervisor_conf"
     fi
 
     # [FIX V20.1] Bước nạp Crontab sẽ được chuyển sang giai đoạn Deploy để đảm bảo đường dẫn tồn tại

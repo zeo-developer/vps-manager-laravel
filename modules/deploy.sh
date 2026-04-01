@@ -218,11 +218,16 @@ run_deploy() {
     supervisorctl reread
     supervisorctl update
     
+    # [FIX V32.0] Nghỉ 1 giây để Supervisor kịp nhận diện các Group mới
+    sleep 1
+    
     # Restart/Start Laravel Queue workers / SSR
-    info "Khởi động lại các tác vụ Supervisor cho [ ${APP_DOMAIN} ]..."
-    supervisorctl restart "worker-${APP_DOMAIN}:*" || supervisorctl start "worker-${APP_DOMAIN}:*" || true
+    info "Khởi động lại các tác vụ Worker cho [ ${APP_DOMAIN} ]..."
+    supervisorctl restart "worker-${APP_DOMAIN}:*" || supervisorctl start "worker-${APP_DOMAIN}:*" || warn "⚠️ Không thể khởi động Worker, hãy kiểm tra log Supervisor."
+    
     if [ "$USE_SSR" = "true" ]; then
-        supervisorctl restart "ssr-${APP_DOMAIN}" || supervisorctl start "ssr-${APP_DOMAIN}" || true
+        info "Khởi động lại tác vụ SSR cho [ ${APP_DOMAIN} ]..."
+        supervisorctl restart "ssr-${APP_DOMAIN}" || supervisorctl start "ssr-${APP_DOMAIN}" || warn "⚠️ Không thể khởi động SSR, hãy kiểm tra log Supervisor."
     fi
 
     # [FIX V20.1] Đăng ký Cronjob Laravel Scheduler (Chỉ chạy khi có code)
