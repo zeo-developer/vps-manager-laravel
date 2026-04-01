@@ -285,18 +285,35 @@ run_rollback() {
 
     cd "$RELEASES_DIR" || { error "Không tìm kiếm được thư mục $RELEASES_DIR"; return 1; }
     
-    # Lấy danh sách release cũ tới mới nhất (có thể chứa 3-5 thư mục)
-    # format ls -1t -> từ mới đến cũ. (dòng số 2 là dòng trước current)
-    local PREV_RELEASE=$(ls -1t | sed -n '2p')
+    # [FIX V30.1] Xác định bản hiện tại (lỗi) và bản trước đó (để rollback)
+    local CURRENT_FAILED_RELEASE_NAME=$(ls -1t | sed -n '1p')
+    local PREV_RELEASE_NAME=$(ls -1t | sed -n '2p')
     
-    if [ -z "$PREV_RELEASE" ]; then
-        error "Không có release lưu trữ trước đó để rollback!"
+    if [ -z "$PREV_RELEASE_NAME" ]; then
+        error "❌ Lỗi: Không có bản release lưu trữ trước đó để rollback!"
+        return 1
     fi
     
-    local TARGET_ROLLBACK="${RELEASES_DIR}/${PREV_RELEASE}"
-    info "Hạ cấp symlink current về phiên bản: $PREV_RELEASE"
-    
-    sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR"
+    local TARGET_ROLLBACK="${RELEASES_DIR}/${PREV_RELEASE_NAME}"
+    local CURRENT_FAILED_RELEASE="${RELEASES_DIR}/${CURRENT_FAILED_RELEASE_NAME}"
+
+    # [FIX V30.2] Cố gắng lùi lại Database (Migration Rollback - Batch gần nhất)
+    # LƯU Ý: Việc này sẽ xóa cột/bảng mới vừa được tạo ở bản deploy lỗi.
+    if [ -f "${CURRENT_FAILED_RELEASE}/artisan" ]; then
+        info "Đang khôi phục cấu trúc Database (Rollback Last Migration Batch)..."
+        warn "🛡️ CẨN TRỌNG: Mọi dữ liệu ở cấu trúc DB mới (nếu có) sẽ bị xóa sạch!"
+        cd "$CURRENT_FAILED_RELEASE" && sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate:rollback --force || warn "⚠️ Không thể rollback database tự động. Anh hãy kiểm tra thủ công!"
+    fi
+
+    info "Đang khôi phục symlink current về phiên bản ổn định: $PREV_RELEASE_NAME..."
+    sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR" || { error "Không thể hoán đổi symlink"; return 1; }
+
+    # [FIX V30.1] Gắn nhãn bản lỗi để tránh bốc nhầm ở lần sau
+    if [ -d "$CURRENT_FAILED_RELEASE" ]; then
+        cd "$RELEASES_DIR"
+        mv "$CURRENT_FAILED_RELEASE_NAME" "${CURRENT_FAILED_RELEASE_NAME}_FAILED"
+        warn "Bản lỗi đã được gắn nhãn: ${CURRENT_FAILED_RELEASE_NAME}_FAILED (Sau 3 lần deploy mới nó sẽ tự bị xóa)."
+    fi
     
     # Xoá views cache để load source cũ an toàn
     cd "$TARGET_ROLLBACK"
@@ -308,6 +325,6 @@ run_rollback() {
     supervisorctl restart all || true
     
     info "================================================================="
-    info "ĐÃ ROLLBACK (Khôi phục) THÀNH CÔNG VỀ BẢN: $PREV_RELEASE !"
+    info "ĐÃ ROLLBACK (Khôi phục) THÀNH CÔNG VỀ BẢN: $PREV_RELEASE_NAME !"
     info "================================================================="
 }
