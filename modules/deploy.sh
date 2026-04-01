@@ -19,12 +19,32 @@ run_deploy() {
     fi
     chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
 
-    # [FIX V17.0] Kiểm tra và Hỏi Git Repo nếu chưa có
+    # [FIX V26.0] Kiểm tra và Hỏi Git Repo nếu chưa có
     if [ -z "$GIT_REPO" ] || [ "$GIT_REPO" = "git_repo_url" ]; then
         info "⚠️ Cần cấu hình Git Repository cho website [ ${APP_DOMAIN} ]."
         while true; do
             read -p "Nhập Git Repo URL (vd: git@github.com:user/repo.git): " input_repo
-            if [[ "$input_repo" =~ ^git@ || "$input_repo" =~ ^https:// ]]; then
+            
+            # Gỡ bỏ khoảng trắng thừa
+            input_repo=$(echo "$input_repo" | xargs)
+
+            # [FIX V26.0] Logic Tự động chuyển đổi HTTPS sang SSH (GitHub/GitLab/Bitbucket)
+            if [[ "$input_repo" =~ ^https://(github\.com|gitlab\.com|bitbucket\.org)/(.+) ]]; then
+                local provider="${BASH_REMATCH[1]}"
+                local path="${BASH_REMATCH[2]}"
+                # Loại bỏ đuôi .git nếu có để chuẩn hóa
+                path="${path%.git}"
+                
+                local ssh_url="git@${provider}:${path}.git"
+                warn "⚠️ Bạn đang sử dụng URL HTTPS. SSH Key sẽ KHÔNG có tác dụng với HTTPS."
+                read -p "Bạn có muốn tự động chuyển sang SSH URL: [ ${ssh_url} ]? (y/n): " convert_choice
+                if [[ "$convert_choice" =~ ^[Yy]$ ]]; then
+                    input_repo="$ssh_url"
+                    info "✅ Đã chuyển đổi sang giao thức SSH."
+                fi
+            fi
+
+            if [[ "$input_repo" =~ ^git@ ]]; then
                 GIT_REPO="$input_repo"
                 local site_env_file="$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
                 # Cập nhật hoặc Thêm mới dòng GIT_REPO
@@ -35,8 +55,12 @@ run_deploy() {
                 fi
                 info "✅ Đã lưu Git Repo: ${GIT_REPO}"
                 break
+            elif [[ "$input_repo" =~ ^https:// ]]; then
+                warn "⚠️ Cảnh báo: Sử dụng HTTPS có thể yêu cầu mật khẩu thủ công."
+                GIT_REPO="$input_repo"
+                break
             else
-                warn "❌ Định dạng URL không hợp lệ! Vui lòng bắt đầu bằng 'git@' hoặc 'https://'."
+                warn "❌ Định dạng URL không hợp lệ! Nên sử dụng dạng 'git@...' để chạy mượt nhất."
             fi
         done
     fi
@@ -51,6 +75,8 @@ run_deploy() {
     # [FIX V25.1] Hàm dọn dẹp nội bộ nếu quy trình build thất bại
     cleanup_failed_release() {
         if [ -d "$NEW_RELEASE" ]; then
+            # [FIX V25.2] Quay về thư mục an toàn trước khi xóa thư mục hiện hành
+            cd "$RELEASES_DIR" || cd /tmp
             warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
             rm -rf "$NEW_RELEASE"
         fi
