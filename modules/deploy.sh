@@ -65,8 +65,14 @@ run_deploy() {
         done
     fi
 
-    # [FIX V27.0] Đảm bảo toàn bộ cấu trúc storage (đặc biệt là logs) tồn tại cho Supervisor
-    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage/"{logs,app,framework/views,framework/cache,framework/sessions} || { error "Không thể tạo cấu trúc thư mục releases/shared"; return 1; }
+    # [FIX V27.2] Đảm bảo toàn bộ cấu trúc log tồn tại bằng lệnh tường minh (Tránh lỗi Brace Expansion)
+    mkdir -p "${RELEASES_DIR}"
+    mkdir -p "${SHARED_DIR}/storage/logs"
+    mkdir -p "${SHARED_DIR}/storage/app/public"
+    mkdir -p "${SHARED_DIR}/storage/framework/cache"
+    mkdir -p "${SHARED_DIR}/storage/framework/sessions"
+    mkdir -p "${SHARED_DIR}/storage/framework/views"
+
     chown -R "$APP_USER":"$APP_USER" "${RELEASES_DIR}" "${SHARED_DIR}"
 
     local TIMESTAMP=$(date +"%Y%m%d%H%M%S")

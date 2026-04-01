@@ -121,9 +121,13 @@ run_add_site() {
 
     mkdir -p "$target_dir/current/public"
     
-    # [FIX V27.0] Khởi tạo cấu trúc đầy đủ để Supervisor Log không bị lỗi CANT_REREAD
+    # [FIX V27.2] Khởi tạo cấu trúc đầy đủ bằng lệnh tường minh (Tránh lỗi Brace Expansion)
     info "Khởi tạo cấu trúc Shared Storage (Logs, Cache, Sessions)..."
-    mkdir -p "$target_dir/shared/storage/"{logs,app,framework/views,framework/cache,framework/sessions}
+    mkdir -p "$target_dir/shared/storage/logs"
+    mkdir -p "$target_dir/shared/storage/app/public"
+    mkdir -p "$target_dir/shared/storage/framework/cache"
+    mkdir -p "$target_dir/shared/storage/framework/sessions"
+    mkdir -p "$target_dir/shared/storage/framework/views"
     
     # Khéo léo trả cái index.html vắn tắt để certbot nhận diện pass challenge nhanh
     echo "<h1>${domain} đang được setup bởi VPS Manager CLI...</h1>" > "$target_dir/current/public/index.html"
