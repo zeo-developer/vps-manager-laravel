@@ -20,6 +20,10 @@ run_deploy() {
     local SHARED_DIR="${BASE_DIR}/shared"
     local CURRENT_DIR="${BASE_DIR}/current"
 
+    # [FIX V31.1] "Nhảy" vào vùng an toàn (BASE_DIR) để tránh lỗi getcwd() của www-data
+    # Nếu đang đứng ở /root, user www-data sẽ không có quyền truy cập vào CWD hiện tại.
+    cd "$BASE_DIR" || cd /tmp
+
     # [FIX V18.2] Đảm bảo quyền sở hữu cho APP_USER
     chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
 
