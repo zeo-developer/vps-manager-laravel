@@ -30,15 +30,34 @@ change_db_password() {
     
     source "$SITE_ENV"
 
+    echo -e "${YELLOW}Nhấn [Enter] để tự động tạo Mật khẩu siêu bảo mật (20 ký tự).${NC}"
     read -p "Nhập Mật khẩu Database Mới: " new_pass
-    if [ -z "$new_pass" ]; then error "Mật khẩu không được để trống."; fi
+    
+    # [FIX V33.0] Nếu để trống, tự động bốc pass ngẫu nhiên
+    if [ -z "$new_pass" ]; then
+        new_pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20)
+        info "🎲 Đã tạo mật khẩu ngẫu nhiên: ${new_pass}"
+    fi
 
     info "Đang thay đổi mật khẩu Database cho User ${DB_USER}..."
     
-    # 1. Đổi trên cơ sở dữ liệu
-    if run_mysql_secure "ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${new_pass}';"; then
-        # Nếu có user remote (%) hoặc IP cụ thể thì cố gắng đổi luôn
-        run_mysql_secure "ALTER USER '${DB_USER}'@'%' IDENTIFIED BY '${new_pass}';" || true
+    # [FIX V33.1] Lấy danh sách Host thực tế của User để tránh lỗi ERROR 1396 (User doesn't exist)
+    # Lệnh này sẽ trả về danh sách host (vd: localhost, %)
+    local existing_hosts=$(sudo mysql -N -s -e "SELECT host FROM mysql.user WHERE user = '${DB_USER}';" 2>/dev/null)
+    
+    if [ -z "$existing_hosts" ]; then
+        error "Không tìm thấy User ${DB_USER} trong hệ thống Database."
+        return 1
+    fi
+
+    local success_count=0
+    for db_host in $existing_hosts; do
+        if run_mysql_secure "ALTER USER '${DB_USER}'@'${db_host}' IDENTIFIED BY '${new_pass}';"; then
+            ((success_count++))
+        fi
+    done
+
+    if [ "$success_count" -gt 0 ]; then
         run_mysql_secure "FLUSH PRIVILEGES;"
         
         # 2. Cập nhật sites/.env.domain (VPS Tool)
@@ -47,22 +66,24 @@ change_db_password() {
         # 3. Cập nhật /var/www/${domain}/shared/.env (Laravel App)
         local shared_env="/var/www/${domain}/shared/.env"
         if [ -f "$shared_env" ]; then
-            sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${new_pass}/" "$shared_env"
+            # [FIX V33.0] Dùng dấu nháy để bọc pass chống lỗi ký tự đặc biệt
+            sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=\"${new_pass}\"/" "$shared_env"
             info "Đã cập nhật mật khẩu vào file .env của Laravel."
             
             # Xoá cache laravel để nhận pass mới
-            cd "/var/www/${domain}/current" && sudo -u "${APP_USER:-www-data}" php artisan config:cache || true
+            if [ -d "/var/www/${domain}/current" ]; then
+                cd "/var/www/${domain}/current" && sudo -u "${APP_USER:-www-data}" php artisan config:cache || true
+            fi
         fi
 
         info "================================================================="
-        info "✅ THÀNH CÔNG: MẬT KHẨU DATABASE ĐÃ ĐƯỢC THAY ĐỔI."
+        info "✅ THÀNH CÔNG: MẬT KHẨU DATABASE ĐÃ ĐƯỢC THAY ĐỔI ($success_count HOST)."
         info "Tài khoản: ${DB_USER}"
         info "Mật khẩu : ${new_pass}"
         info "================================================================="
     else
         error "Có lỗi xảy ra khi đổi mật khẩu Database."
     fi
-
 }
 
 enable_remote_db() {
