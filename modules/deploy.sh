@@ -81,26 +81,40 @@ run_deploy() {
         
         chown "$APP_USER":"$APP_USER" "${SHARED_DIR}/.env"
         
-        # Bắn Symlink tạm thời để chạy lệnh key:generate cho đợt thả App đầu tiên
-        ln -nfs "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env"
-        info "Đang tạo lập APP_KEY Mã hoá cho Project mới tải về..."
-        cd "${NEW_RELEASE}" && sudo -u "$APP_USER" php artisan key:generate --force || true
+        # [FIX V24.1] Khối này sẽ được dời xuống sau Composer Install để đảm bảo có vendor/autoload.php
+        info "Chuẩn bị file .env trong shared..."
     fi
     
     # Xoá storage rỗng của git clone và chèn symlink tới shared/storage
     rm -rf "${NEW_RELEASE}/storage"
     sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage" || error "Không thể tạo symlink cho storage"
+    
+    # [FIX V24.1] Đảm bảo xoá file .env cũ trong source (nếu có) trước khi link
+    rm -f "${NEW_RELEASE}/.env"
     sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env" || error "Không thể tạo symlink cho .env"
 
     # 3. Build Dependencies
-    info "Trỏ đến $NEW_RELEASE: Cài đặt Composer Packages..."
+    info "Trỏ đến $NEW_RELEASE: Cài đặt Composer Packages (Sử dụng PHP ${PHP_VERSION})..."
     cd "$NEW_RELEASE" || error "Không thể truy cập thư mục release: $NEW_RELEASE"
     
-    # Kiểm tra file composer.json trước khi chạy
+    # [FIX V24.1] Ép chạy Composer bằng phiên bản PHP của dự án
     if [ -f "composer.json" ]; then
-        sudo -u "$APP_USER" composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || error "Lỗi khi chạy composer install"
+        sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || error "Lỗi khi chạy composer install"
+    fi
+
+    # [FIX V24.1] Di dời key:generate xuống sau khi đã có vendor/
+    if [ -f "artisan" ]; then
+        # Kiểm tra nếu chưa có APP_KEY trong .env thì mới tạo
+        if ! grep -q "APP_KEY=base64:" "${SHARED_DIR}/.env"; then
+            info "Tạo APP_KEY cho dự án mới..."
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan key:generate --force
+        fi
     fi
     
+    # [FIX V24.1] Sửa quyền NPM Cache để tránh lỗi EACCES
+    mkdir -p /var/www/.npm
+    chown -R "$APP_USER":"$APP_USER" /var/www/.npm
+
     # Kiểm tra file package.json trước khi chạy npm
     if [ -f "package.json" ]; then
         info "Cài đặt và Build NPM Packages (Vite)..."
@@ -108,14 +122,14 @@ run_deploy() {
         sudo -u "$APP_USER" npm run build || error "Lỗi khi chạy npm run build"
     fi
 
-    # 4. Laravel Artisan commands
+    # 4. Laravel Artisan commands (Sử dụng PHP ${PHP_VERSION})
     info "Chạy Migrations và Optimizing Caches..."
     if [ -f "artisan" ]; then
-        sudo -u "$APP_USER" php artisan migrate --force
-        sudo -u "$APP_USER" php artisan optimize:clear
-        sudo -u "$APP_USER" php artisan config:cache
-        sudo -u "$APP_USER" php artisan route:cache
-        sudo -u "$APP_USER" php artisan view:cache
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache
     else
         warn "⚠️ Không tìm thấy file 'artisan', bỏ qua các lệnh Laravel."
     fi
@@ -123,7 +137,7 @@ run_deploy() {
     # 4.1 Xử lý JWT Secret (Nếu có)
     if [ "$USE_JWT" = "true" ]; then
         info "Đang tạo JWT Secret phục vụ xác thực..."
-        sudo -u "$APP_USER" php artisan jwt:secret --force || true
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
     fi
 
     # 4.2 Xử lý Inertia SSR (Nếu có)
@@ -196,8 +210,8 @@ run_rollback() {
     
     # Xoá views cache để load source cũ an toàn
     cd "$TARGET_ROLLBACK"
-    sudo -u "$APP_USER" php artisan view:clear || true
-    sudo -u "$APP_USER" php artisan config:clear || true
+    sudo -u "$APP_USER" php${PHP_VERSION} artisan view:clear || true
+    sudo -u "$APP_USER" php${PHP_VERSION} artisan config:clear || true
     
     # Restart pool php và supervisor
     systemctl reload "php${PHP_VERSION}-fpm"
