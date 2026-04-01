@@ -85,6 +85,17 @@ run_deploy() {
             cd "$RELEASES_DIR" || cd /tmp
             warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
             rm -rf "$NEW_RELEASE"
+
+            # [FIX V28.1] Dọn dẹp Supervisor nếu là lần deploy ĐẦU TIÊN thất bại
+            # Nếu CURRENT_DIR không phải là symlink (tức là chưa từng deploy thành công)
+            if [ ! -L "$CURRENT_DIR" ]; then
+                warn "Phát hiện deploy lần đầu thất bại. Đang tạm gỡ cấu hình Supervisor..."
+                rm -f "/etc/supervisor/conf.d/worker-${APP_DOMAIN}.conf"
+                rm -f "/etc/supervisor/conf.d/ssr-${APP_DOMAIN}.conf"
+                # Nạp lại để Supervisor không báo lỗi file config rác
+                supervisorctl reread > /dev/null 2>&1
+                supervisorctl update > /dev/null 2>&1
+            fi
         fi
     }
 
