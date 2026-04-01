@@ -2,13 +2,22 @@
 # modules/deploy.sh
 # Xử lý quy trình Deploy Zero-Downtime & Rollback
 
-BASE_DIR="/var/www/${APP_DOMAIN}"
-RELEASES_DIR="${BASE_DIR}/releases"
-SHARED_DIR="${BASE_DIR}/shared"
-CURRENT_DIR="${BASE_DIR}/current"
+# Các biến đường dẫn sẽ được khởi tạo động bên trong hàm run_deploy
 
 run_deploy() {
     info "Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
+
+    # [FIX V18.2] Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
+    local BASE_DIR="/var/www/${APP_DOMAIN}"
+    local RELEASES_DIR="${BASE_DIR}/releases"
+    local SHARED_DIR="${BASE_DIR}/shared"
+    local CURRENT_DIR="${BASE_DIR}/current"
+
+    # [FIX V18.2] Đảm bảo quyền sở hữu cho APP_USER trước khi làm việc
+    if [ ! -d "$BASE_DIR" ]; then
+        mkdir -p "$BASE_DIR"
+    fi
+    chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
 
     # [FIX V17.0] Kiểm tra và Hỏi Git Repo nếu chưa có
     if [ -z "$GIT_REPO" ] || [ "$GIT_REPO" = "git_repo_url" ]; then
@@ -33,16 +42,17 @@ run_deploy() {
     fi
 
     # Kiểm tra/tạo cấu trúc thư mục
-
-    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage"
+    mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}/storage" || error "Không thể tạo cấu trúc thư mục releases/shared"
+    chown -R "$APP_USER":"$APP_USER" "${RELEASES_DIR}" "${SHARED_DIR}"
 
     local TIMESTAMP=$(date +"%Y%m%d%H%M%S")
     local NEW_RELEASE="${RELEASES_DIR}/${TIMESTAMP}"
 
     # Clone bằng quyền user ứng dụng với SSH Key riêng biệt
     info "Sử dụng SSH Key riêng biệt: $SSH_KEY_PATH"
+    # [FIX V18.2] Cho phép hiển thị lỗi git clone để dễ debug
     sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
-        git clone "$GIT_REPO" "$NEW_RELEASE"
+        git clone "$GIT_REPO" "$NEW_RELEASE" || error "Lỗi: Không thể clone mã nguồn từ Git!"
 
     # 2. Xử lý Shared Storage và Env
     info "Liên kết file .env và thư mục /storage/ ..."
@@ -79,25 +89,36 @@ run_deploy() {
     
     # Xoá storage rỗng của git clone và chèn symlink tới shared/storage
     rm -rf "${NEW_RELEASE}/storage"
-    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage"
-    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env"
+    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage" || error "Không thể tạo symlink cho storage"
+    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env" || error "Không thể tạo symlink cho .env"
 
     # 3. Build Dependencies
     info "Trỏ đến $NEW_RELEASE: Cài đặt Composer Packages..."
-    cd "$NEW_RELEASE"
-    sudo -u "$APP_USER" composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+    cd "$NEW_RELEASE" || error "Không thể truy cập thư mục release: $NEW_RELEASE"
     
-    info "Cài đặt và Build NPM Packages (Vite)..."
-    sudo -u "$APP_USER" npm install
-    sudo -u "$APP_USER" npm run build
+    # Kiểm tra file composer.json trước khi chạy
+    if [ -f "composer.json" ]; then
+        sudo -u "$APP_USER" composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || error "Lỗi khi chạy composer install"
+    fi
+    
+    # Kiểm tra file package.json trước khi chạy npm
+    if [ -f "package.json" ]; then
+        info "Cài đặt và Build NPM Packages (Vite)..."
+        sudo -u "$APP_USER" npm install || error "Lỗi khi chạy npm install"
+        sudo -u "$APP_USER" npm run build || error "Lỗi khi chạy npm run build"
+    fi
 
     # 4. Laravel Artisan commands
     info "Chạy Migrations và Optimizing Caches..."
-    sudo -u "$APP_USER" php artisan migrate --force
-    sudo -u "$APP_USER" php artisan optimize:clear
-    sudo -u "$APP_USER" php artisan config:cache
-    sudo -u "$APP_USER" php artisan route:cache
-    sudo -u "$APP_USER" php artisan view:cache
+    if [ -f "artisan" ]; then
+        sudo -u "$APP_USER" php artisan migrate --force
+        sudo -u "$APP_USER" php artisan optimize:clear
+        sudo -u "$APP_USER" php artisan config:cache
+        sudo -u "$APP_USER" php artisan route:cache
+        sudo -u "$APP_USER" php artisan view:cache
+    else
+        warn "⚠️ Không tìm thấy file 'artisan', bỏ qua các lệnh Laravel."
+    fi
 
     # 4.1 Xử lý JWT Secret (Nếu có)
     if [ "$USE_JWT" = "true" ]; then

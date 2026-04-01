@@ -35,6 +35,23 @@ run_add_site() {
     sed -i "s/^PHP_VERSION=.*/PHP_VERSION=\"${PHP_VER_SELECTED}\"/" "$SITE_ENV"
     info "Đã chọn PHP ${PHP_VER_SELECTED} cho ${domain}."
 
+    # [FIX V18.2] Tự động cài đặt PHP PHP_VER_SELECTED nếu hệ thống chưa có
+    if [ ! -d "/etc/php/${PHP_VER_SELECTED}/fpm" ]; then
+        info "⚠️ Phát hiện PHP ${PHP_VER_SELECTED} chưa được cài đặt. Đang tiến hành cài đặt dặm..."
+        apt-get update -y
+        local php_pkgs=(
+            "php${PHP_VER_SELECTED}-cli" "php${PHP_VER_SELECTED}-fpm" "php${PHP_VER_SELECTED}-mysql"
+            "php${PHP_VER_SELECTED}-mbstring" "php${PHP_VER_SELECTED}-xml" "php${PHP_VER_SELECTED}-zip"
+            "php${PHP_VER_SELECTED}-bcmath" "php${PHP_VER_SELECTED}-curl" "php${PHP_VER_SELECTED}-intl"
+            "php${PHP_VER_SELECTED}-gd" "php${PHP_VER_SELECTED}-redis"
+        )
+        apt-get install -y "${php_pkgs[@]}"
+        systemctl enable "php${PHP_VER_SELECTED}-fpm"
+        systemctl start "php${PHP_VER_SELECTED}-fpm"
+        info "✅ Đã cài đặt xong PHP ${PHP_VER_SELECTED}."
+    fi
+
+
     # 1.2 Cấu hình nâng cao (JWT, SSR)
     read -p "Dự án có sử dụng JWT không? (y/n, mặc định n): " jwt_choice
     local use_jwt="false"
