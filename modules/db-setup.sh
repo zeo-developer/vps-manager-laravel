@@ -17,20 +17,25 @@ run_db_setup() {
     # Thiết lập mật khẩu Root (Dùng cho Tool quản trị)
     info "Đang thiết lập bảo mật và mật khẩu Root cho MariaDB..."
     
-    # MariaDB cho phép sudo mysql mặc định
-    if sudo mysql -e "SELECT 1;" >/dev/null 2>&1; then
-        info "Đồng bộ mật khẩu Root MariaDB với file .env..."
-        sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ROOT_PASSWORD}';"
-        sudo mysql -e "FLUSH PRIVILEGES;"
+    # [FIX V16.0] Sử dụng mariadb-admin để đặt mật khẩu (Cách cực kỳ ổn định)
+    if sudo mariadb-admin -u root password "${DB_ROOT_PASSWORD}" >/dev/null 2>&1; then
+        info "✅ [THÀNH CÔNG] MariaDB Root Password đã được thiết lập qua mariadb-admin."
     else
-        # Nếu đã đặt rồi thì thử bằng pass
-        if mysql --user=root --password="${DB_ROOT_PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
-            info "Mật khẩu Root MariaDB đã được thiết lập đúng từ trước."
+        # Nếu mariadb-admin thất bại (có thể do đã đặt pass), thử dùng lệnh SQL qua socket
+        if sudo mysql -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${DB_ROOT_PASSWORD}');" >/dev/null 2>&1; then
+             info "✅ [THÀNH CÔNG] MariaDB Root Password đã được cập nhật qua SQL."
         else
-            error "Không thể truy cập MariaDB để thiết lập mật khẩu."
+            # Cuối cùng, kiểm tra xem pass hiện tại có đúng không
+            if mysql --user=root --password="${DB_ROOT_PASSWORD}" -e "SELECT 1;" >/dev/null 2>&1; then
+                info "ℹ️ Mật khẩu Root MariaDB đã được đồng bộ chính xác từ trước."
+            else
+                warn "⚠️ Cảnh báo: Không thể thiết lập mật khẩu MariaDB. Có thể do mật khẩu cũ không khớp."
+                warn "Nếu đây là VPS mới, anh có thể bỏ qua hoặc kiểm tra lại file .env."
+            fi
         fi
     fi
-    info "Mật khẩu Root MariaDB đã được đồng bộ chuẩn với file .env."
+    sudo mysql -u root -p"${DB_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" >/dev/null 2>&1 || sudo mysql -e "FLUSH PRIVILEGES;" >/dev/null 2>&1
+
 
 
 
