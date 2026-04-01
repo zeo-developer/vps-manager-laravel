@@ -104,6 +104,14 @@ run_add_site() {
     local app_user=${APP_USER:-"www-data"}
 
     mkdir -p "$target_dir/current/public"
+    
+    # [FIX V20.1] Khởi tạo cấu trúc Shared Storage để Laravel/Supervisor Log hoạt động ngay
+    info "Khởi tạo cấu trúc Shared Storage (Logs, Cache, Sessions)..."
+    mkdir -p "$target_dir/shared/storage/logs"
+    mkdir -p "$target_dir/shared/storage/framework/cache"
+    mkdir -p "$target_dir/shared/storage/framework/sessions"
+    mkdir -p "$target_dir/shared/storage/framework/views"
+    
     # Khéo léo trả cái index.html vắn tắt để certbot nhận diện pass challenge nhanh
     echo "<h1>${domain} đang được setup bởi VPS Manager CLI...</h1>" > "$target_dir/current/public/index.html"
     chown -R "$app_user":"$app_user" "$target_dir"
@@ -131,8 +139,8 @@ run_add_site() {
     ln -nfs "$nginx_conf" "/etc/nginx/sites-enabled/$domain"
     systemctl reload nginx
 
-    # 5. Cài cắm Supervisor Worker (Queue background)
-    info "Gắn Supervisor Queue Worker cho $domain ..."
+    # 5. Cài cắm Supervisor Worker (Chỉ tạo cấu hình - Kích hoạt khi Deploy)
+    info "Đã gắn cấu hình Supervisor Queue Worker cho $domain (Chờ Deploy để kích hoạt)..."
     local supervisor_conf="/etc/supervisor/conf.d/worker-${domain}.conf"
     
     cat "$SCRIPT_DIR/configs/supervisor-queue.conf" \
@@ -140,32 +148,19 @@ run_add_site() {
         | sed "s/{{APP_USER}}/$app_user/g" \
         | sed "s/laravel-worker/worker-${domain}/g" \
         > "$supervisor_conf"
-        
-    supervisorctl reread
-    supervisorctl update
-    supervisorctl start "worker-${domain}:*" || true
 
-    # 5.1 Cài SSR Supervisor (Nếu có)
+    # 5.1 Cài SSR Supervisor (Nếu có - Chỉ tạo cấu hình)
     if [ "$use_ssr" = "true" ]; then
-        info "Gắn Supervisor SSR cho $domain (Port: $ssr_port) ..."
+        info "Đã gắn cấu hình Supervisor SSR cho $domain (Chờ Deploy để kích hoạt)..."
         local ssr_supervisor_conf="/etc/supervisor/conf.d/ssr-${domain}.conf"
         cat "$SCRIPT_DIR/configs/supervisor-ssr.conf" \
             | sed "s/{{APP_DOMAIN}}/$domain/g" \
             | sed "s/{{APP_USER}}/$app_user/g" \
             | sed "s/{{SSR_PORT}}/$ssr_port/g" \
             > "$ssr_supervisor_conf"
-        supervisorctl update
-        supervisorctl start "ssr-${domain}" || true
     fi
 
-    # 6. Gắn lệnh Crontab cho Laravel Scheduler (schedule:run)
-    info "Đăng ký Auto Cronjob (schedule:run) cho dự án vào User $app_user ..."
-    local CRON_CMD="* * * * * cd /var/www/${domain}/current && php artisan schedule:run >> /dev/null 2>&1"
-    # Gắn vào crontab riêng của acc www-data
-    if ! sudo -u "$app_user" crontab -l 2>/dev/null | grep -q "cd /var/www/${domain}/current"; then
-        (sudo -u "$app_user" crontab -l 2>/dev/null; echo "$CRON_CMD") | sudo -u "$app_user" crontab -
-        info "Crontab Scheduler cho domain [ $domain ] đã được tạo."
-    fi
+    # [FIX V20.1] Bước nạp Crontab sẽ được chuyển sang giai đoạn Deploy để đảm bảo đường dẫn tồn tại
 
     info "================================================================="
     info "🚀 THÀNH CÔNG: DỰ ÁN [ $domain ] ĐÃ SETUP HOÀN TẤT TRÊN SERVER."
