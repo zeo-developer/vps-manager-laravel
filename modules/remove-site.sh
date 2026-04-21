@@ -44,9 +44,11 @@ run_remove_site() {
     rm -f "/etc/nginx/sites-available/$domain"
     systemctl reload nginx
 
-    # 3. Gỡ bỏ Supervisor Queue
+    # 3. Gỡ bỏ Supervisor Group
     info "Đang gỡ bỏ các tác vụ chạy nền (Supervisor)..."
-    rm -f "/etc/supervisor/conf.d/worker-${domain}"*.conf
+    local SAFE_DOMAIN=$(get_safe_domain "$domain")
+    rm -f "/etc/supervisor/conf.d/${SAFE_DOMAIN}"*.conf
+    supervisorctl reread
     supervisorctl update
 
     # 4. Gỡ bỏ Cronjob Schedule

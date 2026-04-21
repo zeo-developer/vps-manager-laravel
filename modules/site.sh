@@ -72,6 +72,20 @@ run_add_site() {
     sed -i "s/^USE_SSR=.*/USE_SSR=\"${use_ssr}\"/" "$SITE_ENV"
     sed -i "s/^SSR_PORT=.*/SSR_PORT=\"${ssr_port}\"/" "$SITE_ENV"
 
+    read -p "Dự án có sử dụng Laravel Reverb không? (y/n, mặc định n): " reverb_choice
+    local use_reverb="false"
+    local reverb_port="8080"
+    if [[ "$reverb_choice" =~ ^[Yy]$ ]]; then
+        use_reverb="true"
+        # Tìm port lớn nhất hiện có và cộng 1 (Bắt đầu từ 8080)
+        local last_reverb_port=$(grep -rh "REVERB_PORT=" "$SCRIPT_DIR/sites/" | grep -oP '(?<=")\d+(?=")' | sort -n | tail -1)
+        if [ ! -z "$last_reverb_port" ]; then
+            reverb_port=$((last_reverb_port + 1))
+        fi
+    fi
+    sed -i "s/^USE_REVERB=.*/USE_REVERB=\"${use_reverb}\"/" "$SITE_ENV"
+    sed -i "s/^REVERB_PORT=.*/REVERB_PORT=\"${reverb_port}\"/" "$SITE_ENV"
+
     # 1.3 Sinh SSH Key độc lập (Multi-Git Support)
     # Di dời Key ra khỏi /root để www-data có thể đọc được
     local ssh_key_dir="/var/www/.vps_keys"
@@ -102,8 +116,8 @@ run_add_site() {
 
     
     # Random DB Credentials
-    # Xoá dấu gạch ngang/chấm trong tên miền để làm tên DB cho an toàn (Tránh lỗi cú pháp SQL)
-    local raw_db_name="db_$(echo $domain | sed 's/[^a-zA-Z0-9]/_/g' | cut -c1-24)"
+    local SAFE_DOMAIN=$(get_safe_domain "$domain")
+    local raw_db_name="db_$(echo $SAFE_DOMAIN | cut -c1-24)"
     local raw_db_pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20 ; echo '')
 
     # Sắp xếp sửa file env
@@ -156,30 +170,64 @@ run_add_site() {
     ln -nfs "$nginx_conf" "/etc/nginx/sites-enabled/$domain"
     systemctl reload nginx
 
-    # 5. Cài cắm Supervisor Worker (Chỉ tạo cấu hình - Kích hoạt khi Deploy)
-    info "Đã gắn cấu hình Supervisor Queue Worker cho $domain (Chờ Deploy để kích hoạt)..."
-    local supervisor_conf="/etc/supervisor/conf.d/worker-${domain}.conf"
+    # 5. Cài cắm Supervisor Group (Chờ Deploy để kích hoạt)
+    info "Đã gắn cấu hình Supervisor Group [ ${SAFE_DOMAIN} ] cho ${domain}..."
+    local supervisor_conf="/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
     
-    cat "$SCRIPT_DIR/configs/supervisor-queue.conf" \
-        | sed "s/{{APP_DOMAIN}}/$domain/g" \
-        | sed "s/{{APP_USER}}/$app_user/g" \
-        | sed "s/{{PHP_VERSION}}/$php_ver/g" \
-        | sed "s/laravel-worker/worker-${domain}/g" \
-        > "$supervisor_conf"
-    chmod 644 "$supervisor_conf"
+    # Định nghĩa danh sách chương trình trong group
+    local supervisor_programs="${SAFE_DOMAIN}-worker"
+    [ "$use_ssr" = "true" ] && supervisor_programs="${supervisor_programs},${SAFE_DOMAIN}-ssr"
+    [ "$use_reverb" = "true" ] && supervisor_programs="${supervisor_programs},${SAFE_DOMAIN}-reverb"
 
-    # 5.1 Cài SSR Supervisor (Nếu có - Chỉ tạo cấu hình)
-    if [ "$use_ssr" = "true" ]; then
-        info "Đã gắn cấu hình Supervisor SSR cho $domain (Chờ Deploy để kích hoạt)..."
-        local ssr_supervisor_conf="/etc/supervisor/conf.d/ssr-${domain}.conf"
-        cat "$SCRIPT_DIR/configs/supervisor-ssr.conf" \
-            | sed "s/{{APP_DOMAIN}}/$domain/g" \
-            | sed "s/{{APP_USER}}/$app_user/g" \
-            | sed "s/{{PHP_VERSION}}/$php_ver/g" \
-            | sed "s/{{SSR_PORT}}/$ssr_port/g" \
-            > "$ssr_supervisor_conf"
-        chmod 644 "$ssr_supervisor_conf"
-    fi
+    # Tạo nội dung file cấu hình tập trung
+    cat <<EOF > "$supervisor_conf"
+[group:${SAFE_DOMAIN}]
+programs=${supervisor_programs}
+
+[program:${SAFE_DOMAIN}-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php${php_ver} /var/www/${domain}/current/artisan queue:work --sleep=3 --tries=3 --max-time=3600
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=${app_user}
+numprocs=2
+redirect_stderr=true
+stdout_logfile=/var/www/${domain}/shared/storage/logs/worker.log
+stopwaitsecs=3600
+
+$( [ "$use_ssr" = "true" ] && cat <<SSR_EOF
+[program:${SAFE_DOMAIN}-ssr]
+process_name=%(program_name)s
+command=php${php_ver} /var/www/${domain}/current/artisan inertia:start-ssr
+autostart=true
+autorestart=true
+user=${app_user}
+redirect_stderr=true
+stdout_logfile=/var/www/${domain}/shared/storage/logs/ssr.log
+stopwaitsecs=3600
+environment=NODE_PORT=${ssr_port}
+SSR_EOF
+)
+
+$( [ "$use_reverb" = "true" ] && cat <<REVERB_EOF
+[program:${SAFE_DOMAIN}-reverb]
+process_name=%(program_name)s
+command=php${php_ver} /var/www/${domain}/current/artisan reverb:start --host="0.0.0.0" --port=${reverb_port}
+autostart=true
+autorestart=true
+stopasgroup=true
+killasgroup=true
+user=${app_user}
+numprocs=1
+redirect_stderr=true
+stdout_logfile=/var/www/${domain}/shared/storage/logs/reverb.log
+stopwaitsecs=3600
+REVERB_EOF
+)
+EOF
+    chmod 644 "$supervisor_conf"
 
     # Bước nạp Crontab sẽ được chuyển sang giai đoạn Deploy để đảm bảo đường dẫn tồn tại
 
@@ -190,6 +238,9 @@ run_add_site() {
     info "👉 Database Pass     : $raw_db_pass"
     if [ "$use_ssr" = "true" ]; then
         info "👉 SSR Port          : $ssr_port"
+    fi
+    if [ "$use_reverb" = "true" ]; then
+        info "👉 Reverb Port       : $reverb_port"
     fi
     info ""
     info "🔑 SSH PUBLIC KEY (Copy cái này add vào Deploy Keys của GitHub):"

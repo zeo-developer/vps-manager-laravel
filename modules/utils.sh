@@ -25,6 +25,13 @@ sanitize_input() {
     echo "${input}" | sed 's/[^a-zA-Z0-9._-]//g'
 }
 
+# Tạo định danh an toàn (Safe Domain) cho các dịch vụ hệ thống (Supervisor, DB...)
+get_safe_domain() {
+    local domain="$1"
+    # Chuyển site.com -> site_com, my-site.com -> my_site_com
+    echo "$domain" | sed 's/[^a-zA-Z0-9]/_/g'
+}
+
 # Thắt chặt quyền file cấu hình nhạy cảm (.env)
 harden_permissions() {
     local target="$1"

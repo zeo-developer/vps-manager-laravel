@@ -137,8 +137,8 @@ run_deploy() {
 
                 if [ ! -L "$CURRENT_DIR" ]; then
                     warn "Phát hiện deploy lần đầu thất bại. Đang tạm gỡ cấu hình Supervisor..."
-                    rm -f "/etc/supervisor/conf.d/worker-${APP_DOMAIN}.conf"
-                    rm -f "/etc/supervisor/conf.d/ssr-${APP_DOMAIN}.conf"
+                    local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
+                    rm -f "/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
                     supervisorctl reread > /dev/null 2>&1
                     supervisorctl update > /dev/null 2>&1
                 fi
@@ -229,13 +229,12 @@ run_deploy() {
         systemctl reload "php${PHP_VERSION}-fpm"
         
         # Supervisor
+        local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
         supervisorctl reread
         supervisorctl update
         sleep 1
-        supervisorctl restart "worker-${APP_DOMAIN}:*" || supervisorctl start "worker-${APP_DOMAIN}:*" || warn "⚠️ Không thể khởi động Worker"
-        if [ "$USE_SSR" = "true" ]; then
-            supervisorctl restart "ssr-${APP_DOMAIN}" || supervisorctl start "ssr-${APP_DOMAIN}" || warn "⚠️ Không thể khởi động SSR"
-        fi
+        info "Đang khởi động/restart các dịch vụ Supervisor thuộc nhóm [ ${SAFE_DOMAIN} ]..."
+        supervisorctl restart "${SAFE_DOMAIN}:*" || supervisorctl start "${SAFE_DOMAIN}:*" || warn "⚠️ Không thể khởi động nhóm dịch vụ Supervisor"
 
         # Cronjob
         local CRON_CMD="* * * * * cd ${CURRENT_DIR} && php${PHP_VERSION} artisan schedule:run >> /dev/null 2>&1"
@@ -337,7 +336,9 @@ run_rollback() {
     
     # Restart pool php và supervisor
     systemctl reload "php${PHP_VERSION}-fpm"
-    supervisorctl restart all || true
+    local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
+    info "Đang Rollback các dịch vụ Supervisor thuộc nhóm [ ${SAFE_DOMAIN} ]..."
+    supervisorctl restart "${SAFE_DOMAIN}:*" || true
     
     info "================================================================="
     info "ĐÃ ROLLBACK (Khôi phục) THÀNH CÔNG VỀ BẢN: $PREV_RELEASE_NAME !"
