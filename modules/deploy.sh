@@ -133,6 +133,8 @@ run_deploy() {
         info "Đảm bảo cấu hình .env chuẩn Production và đúng Domain..."
         source "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
         sed -i "s|^APP_URL=.*|APP_URL=https://${APP_DOMAIN}|g" "${SHARED_DIR}/.env"
+        sed -i "s/^DB_CONNECTION=.*/DB_CONNECTION=mysql/g" "${SHARED_DIR}/.env"
+        sed -i "s/^DB_HOST=.*/DB_HOST=127.0.0.1/g" "${SHARED_DIR}/.env"
         sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_NAME}/g" "${SHARED_DIR}/.env"
         sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USER}/g" "${SHARED_DIR}/.env"
         sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
