@@ -54,6 +54,4 @@ run_site_info() {
     echo -e " ${CYAN}🔑 SSH PUBLIC KEY (Deploy Key):${NC}"
     echo -e "${YELLOW}${public_key}${NC}"
     echo -e "------------------------------------------"
-    
-    read -p "Nhấn Enter để quay lại..."
 }

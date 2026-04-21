@@ -67,3 +67,56 @@ EOF
     # Dọn dẹp
     rm -f "$tmp_cnf"
 }
+
+# -------------------------------------------------------------------------
+# CÁC HÀM QUẢN LÝ DANH SÁCH SITE
+# -------------------------------------------------------------------------
+
+# Trích xuất danh sách domain từ các file .env trong thư mục sites/
+get_site_list() {
+    local site_dir="${SCRIPT_DIR}/sites"
+    if [ ! -d "$site_dir" ]; then
+        return
+    fi
+    # Tìm các file .env.xxx và lấy phần xxx (tên miền)
+    ls "${site_dir}"/.env.* 2>/dev/null | sed "s|${site_dir}/.env.||g"
+}
+
+# Hiển thị thực đơn chọn Website và trả về domain được chọn
+select_site_menu() {
+    local header="$1"
+    local sites=($(get_site_list))
+    
+    if [ ${#sites[@]} -eq 0 ]; then
+        error "Hiện chưa có Website nào được tạo! Vui lòng chọn mục '1. Thêm Website' trước." >&2
+        return 1
+    fi
+
+    echo -e "${CYAN}------------------------------------------${NC}" >&2
+    echo -e "${YELLOW} ${header:-DANH SÁCH WEBSITE ĐANG CÓ:}${NC}" >&2
+    echo -e "${CYAN}------------------------------------------${NC}" >&2
+    
+    local i=1
+    for site in "${sites[@]}"; do
+        echo -e " ${GREEN}$i.${NC} $site" >&2
+        i=$((i + 1))
+    done
+    echo -e " ${RED}0.${NC} Quay lại Menu chính" >&2
+    echo -e "${CYAN}------------------------------------------${NC}" >&2
+
+    local choice
+    while true; do
+        read -p "Chọn Website (1-$((i-1))): " choice >&2
+        if [[ "$choice" == "0" ]]; then
+            echo "" >&2
+            return 1
+        fi
+        if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -lt "$i" ]; then
+            local selected_site="${sites[$((choice-1))]}"
+            # Trả về kết quả cho stdout để subshell bắt được
+            echo "$selected_site"
+            return 0
+        fi
+        warn "Lựa chọn không hợp lệ. Vui lòng chọn lại!" >&2
+    done
+}

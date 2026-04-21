@@ -82,48 +82,48 @@ show_cli_menu() {
                execute_action "add-site" "$DOMAIN_PROMPT" 
                ;;
             2) 
-               read -p "Nhập Tên miền cần quản lý SSL: " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần quản lý SSL")
+               [ $? -ne 0 ] && continue
                execute_action "ssl" "$DOMAIN_PROMPT" 
                ;;
             3) 
-               read -p "Nhập Tên miền cần Deploy (vd: demo.com): " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Deploy")
+               [ $? -ne 0 ] && continue
                execute_action "deploy" "$DOMAIN_PROMPT" 
                ;;
             4) 
-               read -p "Nhập Tên miền cần phục hồi Rollback: " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần phục hồi Rollback")
+               [ $? -ne 0 ] && continue
                execute_action "rollback" "$DOMAIN_PROMPT" 
                ;;
             5) 
-               read -p "Nhập Tên miền CẦN XÓA HOÀN TOÀN: " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền CẦN XÓA HOÀN TOÀN")
+               [ $? -ne 0 ] && continue
                execute_action "remove-site" "$DOMAIN_PROMPT" 
                ;;
             6) 
-               read -p "Nhập Tên miền cần xem thông tin: " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần xem thông tin")
+               [ $? -ne 0 ] && continue
                execute_action "info" "$DOMAIN_PROMPT" 
                ;;
             7) 
-               read -p "Nhập Tên miền cần Đổi PHP Version: " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Đổi PHP Version")
+               [ $? -ne 0 ] && continue
                execute_action "change-php" "$DOMAIN_PROMPT" 
                ;;
             8) 
-               read -p "Nhập Tên miền quản lý Database: " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền quản lý Database")
+               [ $? -ne 0 ] && continue
                execute_action "manage-db" "$DOMAIN_PROMPT" 
                ;;
             9) 
-               read -p "Nhập Tên miền cần Xem Logs (VD: demo.com): " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Xem Logs")
+               [ $? -ne 0 ] && continue
                execute_action "logs" "$DOMAIN_PROMPT" 
                ;;
             10) 
-               read -p "Nhập Tên miền Web muốn thêm Queue Worker: " DOMAIN_PROMPT
-               DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền Web muốn thêm Queue Worker")
+               [ $? -ne 0 ] && continue
                execute_action "add-queue" "$DOMAIN_PROMPT" 
                ;;
             11) execute_action "update" ;;
