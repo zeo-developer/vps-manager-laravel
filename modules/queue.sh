@@ -33,6 +33,7 @@ run_add_queue() {
     cat "$SCRIPT_DIR/configs/supervisor-queue.conf" \
         | sed "s/{{APP_DOMAIN}}/$domain/g" \
         | sed "s/{{APP_USER}}/$app_user/g" \
+        | sed "s/{{PHP_VERSION}}/$PHP_VERSION/g" \
         | sed "s/laravel-worker/${program_name}/g" \
         | sed "s/numprocs=2/numprocs=${num_procs}/g" \
         > "$supervisor_conf"
