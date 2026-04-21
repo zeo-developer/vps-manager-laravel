@@ -90,7 +90,17 @@ show_cli_menu() {
             3) 
                DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Deploy")
                [ $? -ne 0 ] && continue
-               execute_action "deploy" "$DOMAIN_PROMPT" 
+               
+               echo -e "Chọn chế độ triển khai:"
+               echo -e " ${GREEN}1.${NC} Zero-Downtime (An toàn, mặc định)"
+               echo -e " ${YELLOW}2.${NC} Quick Deploy (Nhanh, chỉ dành cho máy đã có cấu hình)"
+               read -p "Lựa chọn (1-2): " deploy_choice
+               
+               if [ "$deploy_choice" == "2" ]; then
+                   execute_action "deploy" "$DOMAIN_PROMPT" "quick"
+               else
+                   execute_action "deploy" "$DOMAIN_PROMPT" "zdt"
+               fi
                ;;
             4) 
                DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần phục hồi Rollback")
@@ -141,6 +151,7 @@ show_cli_menu() {
 execute_action() {
     local cmd="$1"
     local domain_arg="$2"
+    local extra_arg="$3"
     
     # Kiểm tra tính hợp lệ của định dạng Tên Miền (Nếu có tham số domain)
     if [ ! -z "$domain_arg" ]; then
@@ -169,7 +180,7 @@ execute_action() {
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền deploy."; fi
             load_env "$domain_arg"
             source "$SCRIPT_DIR/modules/deploy.sh"
-            run_deploy "$domain_arg"
+            run_deploy "$extra_arg"
             ;;
         rollback)
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền cần rollback."; fi
@@ -239,5 +250,5 @@ if [ $# -eq 0 ]; then
     show_cli_menu
 else
     # Gõ thẳng command
-    execute_action "$1" "$2"
+    execute_action "$1" "$2" "$3"
 fi

@@ -5,6 +5,7 @@
 # Các biến đường dẫn sẽ được khởi tạo động bên trong hàm run_deploy
 
 run_deploy() {
+    local DEPLOY_MODE="${1:-zdt}"
     # Kiểm tra Website có tồn tại thật hay không (Dựa trên file env của site)
     local SITE_ENV_FILE="$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
     if [ ! -f "$SITE_ENV_FILE" ]; then
@@ -12,7 +13,11 @@ run_deploy() {
         return 1
     fi
 
-    info "Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
+    if [ "$DEPLOY_MODE" == "quick" ]; then
+        info "🚀 Bắt đầu quy trình Quick Deploy (Domain: $APP_DOMAIN)..."
+    else
+        info "🔄 Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
+    fi
 
     # Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
     local BASE_DIR="/var/www/${APP_DOMAIN}"
@@ -83,185 +88,172 @@ run_deploy() {
 
     chown -R "$APP_USER":"$APP_USER" "${RELEASES_DIR}" "${SHARED_DIR}"
 
-    local TIMESTAMP=$(date +"%Y%m%d%H%M%S")
-    local NEW_RELEASE="${RELEASES_DIR}/${TIMESTAMP}"
-
-    # Hàm dọn dẹp nội bộ nếu quy trình build thất bại
-    cleanup_failed_release() {
-        if [ -d "$NEW_RELEASE" ]; then
-            # Quay về thư mục an toàn trước khi xóa thư mục hiện hành
-            cd "$RELEASES_DIR" || cd /tmp
-            warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
-            rm -rf "$NEW_RELEASE"
-
-            # Dọn dẹp Supervisor nếu là lần deploy ĐẦU TIÊN thất bại
-            # Nếu CURRENT_DIR không phải là symlink (tức là chưa từng deploy thành công)
-            if [ ! -L "$CURRENT_DIR" ]; then
-                warn "Phát hiện deploy lần đầu thất bại. Đang tạm gỡ cấu hình Supervisor..."
-                rm -f "/etc/supervisor/conf.d/worker-${APP_DOMAIN}.conf"
-                rm -f "/etc/supervisor/conf.d/ssr-${APP_DOMAIN}.conf"
-                # Nạp lại để Supervisor không báo lỗi file config rác
-                supervisorctl reread > /dev/null 2>&1
-                supervisorctl update > /dev/null 2>&1
-            fi
+    # --- PHÂN NHÁNH LOGIC DEPLOY ---
+    if [ "$DEPLOY_MODE" == "quick" ]; then
+        # CHẾ ĐỘ QUICK DEPLOY
+        if [ ! -L "$CURRENT_DIR" ]; then
+            error "❌ Lỗi: Site chưa bao giờ được triển khai ZDT thành công (thiếu liên kết 'current')."
+            error "Vui lòng chạy Deploy chế độ bình thường (ZDT) ít nhất một lần để khởi tạo cấu trúc."
+            return 1
         fi
-    }
 
-    # Clone bằng quyền user ứng dụng với SSH Key riêng biệt
-    info "Sử dụng SSH Key riêng biệt: $SSH_KEY_PATH"
-    # Cho phép hiển thị lỗi git clone để dễ debug
-    sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
-        git clone "$GIT_REPO" "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi: Không thể clone mã nguồn từ Git!"; return 1; }
-
-    # 2. Xử lý Shared Storage và Env
-    info "Liên kết file .env và thư mục /storage/ ..."
-    # Lần đầu Clone web: Trộn file .env.example của Mã nguồn Laravel với Cấu hình Tốc độ Của Server
-    if [ ! -f "${SHARED_DIR}/.env" ]; then
-        info "Khởi tạo file .env đầu tiên cho Laravel từ thư mục mã nguồn..."
-        if [ -f "${NEW_RELEASE}/.env.example" ]; then
-            cp "${NEW_RELEASE}/.env.example" "${SHARED_DIR}/.env"
-        else
-            touch "${SHARED_DIR}/.env"
-        fi
+        info "Đang kéo code mới nhất bằng git pull tại thư mục current..."
+        cd "$CURRENT_DIR" || { error "Không thể truy cập thư mục current"; return 1; }
         
-        chown "$APP_USER":"$APP_USER" "${SHARED_DIR}/.env"
-        info "Khởi tạo file .env thành công."
-    fi
+        # Pull code
+        sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
+            git pull origin main || { error "Lỗi khi chạy git pull"; return 1; }
 
-    # [UPDATE] Luôn cập nhật các thông số quan trọng để đảm bảo đồng bộ cấu hình
-    if [ -f "${SHARED_DIR}/.env" ]; then
-        info "Đảm bảo cấu hình .env chuẩn Production và đúng Domain..."
+        # Cài đặt Composer (nhanh)
+        if [ -f "composer.json" ]; then
+            info "Cập nhật Composer packages..."
+            sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || { error "Lỗi khi chạy composer install"; return 1; }
+        fi
+
+        # Laravel commands
+        if [ -f "artisan" ]; then
+            info "Chạy Migrations và Clear Cache..."
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { error "Lỗi khi chạy migration"; return 1; }
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { error "Lỗi khi clear optimize"; return 1; }
+        fi
+
+        # Reload PHP-FPM
+        systemctl reload "php${PHP_VERSION}-fpm"
+
+        info "================================================================="
+        info "✅ QUICK DEPLOY THÀNH CÔNG!"
+        info "================================================================="
+    else
+        # CHẾ ĐỘ ZERO-DOWNTIME DEPLOYMENT (Giữ nguyên logic cũ)
+        local TIMESTAMP=$(date +"%Y%m%d%H%M%S")
+        local NEW_RELEASE="${RELEASES_DIR}/${TIMESTAMP}"
+
+        # Hàm dọn dẹp nội bộ nếu quy trình build thất bại
+        cleanup_failed_release() {
+            if [ -d "$NEW_RELEASE" ]; then
+                cd "$RELEASES_DIR" || cd /tmp
+                warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
+                rm -rf "$NEW_RELEASE"
+
+                if [ ! -L "$CURRENT_DIR" ]; then
+                    warn "Phát hiện deploy lần đầu thất bại. Đang tạm gỡ cấu hình Supervisor..."
+                    rm -f "/etc/supervisor/conf.d/worker-${APP_DOMAIN}.conf"
+                    rm -f "/etc/supervisor/conf.d/ssr-${APP_DOMAIN}.conf"
+                    supervisorctl reread > /dev/null 2>&1
+                    supervisorctl update > /dev/null 2>&1
+                fi
+            fi
+        }
+
+        # Clone
+        info "Sử dụng SSH Key riêng biệt: $SSH_KEY_PATH"
+        sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
+            git clone "$GIT_REPO" "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi: Không thể clone mã nguồn từ Git!"; return 1; }
+
+        # 2. Xử lý Shared Storage và Env
+        info "Liên kết file .env và thư mục /storage/ ..."
+        if [ ! -f "${SHARED_DIR}/.env" ]; then
+            info "Khởi tạo file .env đầu tiên cho Laravel..."
+            if [ -f "${NEW_RELEASE}/.env.example" ]; then
+                cp "${NEW_RELEASE}/.env.example" "${SHARED_DIR}/.env"
+            else
+                touch "${SHARED_DIR}/.env"
+            fi
+            chown "$APP_USER":"$APP_USER" "${SHARED_DIR}/.env"
+        fi
+
+        # Đồng bộ .env
         source "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
         sed -i "s|^APP_URL=.*|APP_URL=https://${APP_DOMAIN}|g" "${SHARED_DIR}/.env"
-        sed -i "s/^DB_CONNECTION=.*/DB_CONNECTION=mysql/g" "${SHARED_DIR}/.env"
-        sed -i "s/^DB_HOST=.*/DB_HOST=127.0.0.1/g" "${SHARED_DIR}/.env"
         sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_NAME}/g" "${SHARED_DIR}/.env"
         sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USER}/g" "${SHARED_DIR}/.env"
         sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
-        sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
-    fi
-    
-    # Xoá storage rỗng của git clone và chèn symlink tới shared/storage
-    rm -rf "${NEW_RELEASE}/storage"
-    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage" || { cleanup_failed_release; error "Không thể tạo symlink cho storage"; return 1; }
-    
-    # Đảm bảo xoá file .env cũ trong source (nếu có) trước khi link
-    rm -f "${NEW_RELEASE}/.env"
-    sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env" || { cleanup_failed_release; error "Không thể tạo symlink cho .env"; return 1; }
-
-    # 3. Build Dependencies
-    info "Trỏ đến $NEW_RELEASE: Cài đặt Composer Packages (Sử dụng PHP ${PHP_VERSION})..."
-    cd "$NEW_RELEASE" || error "Không thể truy cập thư mục release: $NEW_RELEASE"
-    
-    # Ép chạy Composer bằng phiên bản PHP của dự án
-    if [ -f "composer.json" ]; then
-        sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || { cleanup_failed_release; error "Lỗi khi chạy composer install"; return 1; }
-    fi
-
-    # Di dời key:generate xuống sau khi đã có vendor/
-    if [ -f "artisan" ]; then
-        # Kiểm tra nếu chưa có APP_KEY trong .env thì mới tạo
-        if ! grep -q "APP_KEY=base64:" "${SHARED_DIR}/.env"; then
-            info "Tạo APP_KEY cho dự án mới..."
-            sudo -u "$APP_USER" php${PHP_VERSION} artisan key:generate --force || { cleanup_failed_release; error "Lỗi khi tạo APP_KEY"; return 1; }
-        fi
-    fi
-    
-    # Sửa quyền NPM Cache để tránh lỗi EACCES
-    mkdir -p /var/www/.npm
-    chown -R "$APP_USER":"$APP_USER" /var/www/.npm
-
-    # Kiểm tra file package.json trước khi chạy npm
-    if [ -f "package.json" ]; then
-        info "Cài đặt và Build NPM Packages (Vite)..."
-        sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
-        sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
-    fi
-
-    # 4. Laravel Artisan commands (Sử dụng PHP ${PHP_VERSION})
-    info "Chạy Migrations, Storage Link và Optimizing Caches..."
-    if [ -f "artisan" ]; then
-        # [NEW] Tạo liên kết storage của Laravel
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan storage:link --force || warn "⚠️ Không thể tạo storage:link"
         
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache || { cleanup_failed_release; error "Lỗi khi cache route"; return 1; }
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache || { cleanup_failed_release; error "Lỗi khi cache view"; return 1; }
-    else
-        warn "⚠️ Không tìm thấy file 'artisan', bỏ qua các lệnh Laravel."
-    fi
+        # Link storage & env
+        rm -rf "${NEW_RELEASE}/storage"
+        sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage"
+        rm -f "${NEW_RELEASE}/.env"
+        sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env"
 
-    # 4.1 Xử lý JWT Secret (Chỉ tạo nếu chưa có để tránh đăng xuất người dùng)
-    if [ "$USE_JWT" = "true" ]; then
-        if ! grep -q "JWT_SECRET=" "${SHARED_DIR}/.env" 2>/dev/null; then
-            info "Khởi tạo JWT Secret cho lần đầu sử dụng..."
-            sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
-        else
-            info "Mã JWT Secret đã tồn tại. Giữ nguyên để duy trì phiên đăng nhập."
+        # 3. Build Dependencies (PHP)
+        cd "$NEW_RELEASE"
+        if [ -f "composer.json" ]; then
+            sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || { cleanup_failed_release; error "Lỗi khi chạy composer install"; return 1; }
         fi
-    fi
 
-    # 4.2 Xử lý Inertia SSR (Nếu có)
-    if [ "$USE_SSR" = "true" ]; then
-        info "Đang Build Inertia SSR..."
-        # Kiểm tra lệnh build ssr trong package.json
-        if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
-            sudo -u "$APP_USER" npm run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
-        else
-            warn "Không tìm thấy script 'build:ssr', bỏ qua bước build SSR."
+        if [ -f "artisan" ]; then
+            if ! grep -q "APP_KEY=base64:" "${SHARED_DIR}/.env"; then
+                sudo -u "$APP_USER" php${PHP_VERSION} artisan key:generate --force || { cleanup_failed_release; error "Lỗi khi tạo APP_KEY"; return 1; }
+            fi
         fi
+
+        # 3. Build Dependencies (NPM)
+        if [ -f "package.json" ]; then
+            info "Cài đặt và Build NPM Packages..."
+            sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
+            sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
+        fi
+
+        # 4. Laravel commands
+        if [ -f "artisan" ]; then
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan storage:link --force || warn "⚠️ Không thể tạo storage:link"
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache || { cleanup_failed_release; error "Lỗi khi cache route"; return 1; }
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache || { cleanup_failed_release; error "Lỗi khi cache view"; return 1; }
+        fi
+
+        # 4.1 JWT Secret (Check if exists)
+        if [ "$USE_JWT" = "true" ] && [ -f "artisan" ]; then
+            if ! grep -q "JWT_SECRET=" "${SHARED_DIR}/.env" 2>/dev/null; then
+                info "Khởi tạo JWT Secret..."
+                sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
+            fi
+        fi
+
+        # 4.2 Inertia SSR
+        if [ "$USE_SSR" = "true" ] && [ -f "package.json" ]; then
+            if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
+                sudo -u "$APP_USER" npm run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
+            fi
+        fi
+
+        # 5. Kích hoạt Symlink
+        if [ -d "$CURRENT_DIR" ] && [ ! -L "$CURRENT_DIR" ]; then
+            rm -rf "$CURRENT_DIR"
+        fi
+        sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR" || { cleanup_failed_release; error "Không thể hoán đổi symlink current"; return 1; }
+        
+        systemctl reload "php${PHP_VERSION}-fpm"
+        
+        # Supervisor
+        supervisorctl reread
+        supervisorctl update
+        sleep 1
+        supervisorctl restart "worker-${APP_DOMAIN}:*" || supervisorctl start "worker-${APP_DOMAIN}:*" || warn "⚠️ Không thể khởi động Worker"
+        if [ "$USE_SSR" = "true" ]; then
+            supervisorctl restart "ssr-${APP_DOMAIN}" || supervisorctl start "ssr-${APP_DOMAIN}" || warn "⚠️ Không thể khởi động SSR"
+        fi
+
+        # Cronjob
+        local CRON_CMD="* * * * * cd ${CURRENT_DIR} && php${PHP_VERSION} artisan schedule:run >> /dev/null 2>&1"
+        if ! sudo -u "$APP_USER" crontab -l 2>/dev/null | grep -q "cd ${CURRENT_DIR}"; then
+            (sudo -u "$APP_USER" crontab -l 2>/dev/null; echo "$CRON_CMD") | sudo -u "$APP_USER" crontab -
+        fi
+
+        # 6. Dọn dẹp
+        info "Dọn dẹp Releases cũ (Giữ lại 3 bản)..."
+        cd "$RELEASES_DIR"
+        ls -1t | tail -n +4 | xargs -r rm -rf
+
+        info "================================================================="
+        info "TRIỂN KHAI ZDT THÀNH CÔNG!"
+        info "RELEASE MỚI: $TIMESTAMP"
+        info "================================================================="
     fi
-
-    # 5. Kích hoạt Zero-Downtime Symlink
-    info "Hoán đổi symlink gốc 'current' sang bản Release mới nhất..."
-    
-    # Nếu 'current' là thư mục thật (nháp từ add-site), phải xóa để ln tạo được symlink chuẩn
-    if [ -d "$CURRENT_DIR" ] && [ ! -L "$CURRENT_DIR" ]; then
-        warn "Dọn dẹp thư mục nháp 'current' để khởi tạo cấu trúc Zero-Downtime Symlink..."
-        rm -rf "$CURRENT_DIR"
-    fi
-
-    sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR" || { cleanup_failed_release; error "Không thể hoán đổi symlink current"; return 1; }
-    
-    # Restart php-fpm mềm để giải phóng OPcache cũ
-    systemctl reload "php${PHP_VERSION}-fpm"
-    
-    # Kích hoạt Supervisor (Lần đầu hoặc Cập nhật)
-    info "Đang nạp cấu hình Supervisor và kích hoạt Workers..."
-    supervisorctl reread
-    supervisorctl update
-    
-    # Nghỉ 1 giây để Supervisor kịp nhận diện các Group mới
-    sleep 1
-    
-    # Restart/Start Laravel Queue workers / SSR
-    info "Khởi động lại các tác vụ Worker cho [ ${APP_DOMAIN} ]..."
-    supervisorctl restart "worker-${APP_DOMAIN}:*" || supervisorctl start "worker-${APP_DOMAIN}:*" || warn "⚠️ Không thể khởi động Worker, hãy kiểm tra log Supervisor."
-    
-    if [ "$USE_SSR" = "true" ]; then
-        info "Khởi động lại tác vụ SSR cho [ ${APP_DOMAIN} ]..."
-        supervisorctl restart "ssr-${APP_DOMAIN}" || supervisorctl start "ssr-${APP_DOMAIN}" || warn "⚠️ Không thể khởi động SSR, hãy kiểm tra log Supervisor."
-    fi
-
-    # Đăng ký Cronjob Laravel Scheduler (Chỉ chạy khi có code)
-    info "Đảm bảo Laravel Scheduler (Cronjob) đã được đăng ký..."
-    local CRON_CMD="* * * * * cd ${CURRENT_DIR} && php${PHP_VERSION} artisan schedule:run >> /dev/null 2>&1"
-    if ! sudo -u "$APP_USER" crontab -l 2>/dev/null | grep -q "cd ${CURRENT_DIR}"; then
-        (sudo -u "$APP_USER" crontab -l 2>/dev/null; echo "$CRON_CMD") | sudo -u "$APP_USER" crontab -
-        info "✅ Crontab Scheduler cho domain [ ${APP_DOMAIN} ] đã được kích hoạt."
-    fi
-
-    # 6. Dọn dẹp bản release cũ (giữ lại 3 bản gần nhất)
-    info "Dọn dẹp Releases cũ (Giữ lại 3 bản)..."
-    cd "$RELEASES_DIR"
-    ls -1t | tail -n +4 | xargs -r rm -rf
-
-    info "================================================================="
-    info "TRIỂN KHAI THÀNH CÔNG \n RELEASE MỚI VÀO: $NEW_RELEASE !"
-    info "================================================================="
+}
     
     # Móc call API Report (Module monitor)
     # bash monitor.sh send_telegram "Deploy Thành Công lên release: ${TIMESTAMP}"
