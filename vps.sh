@@ -85,6 +85,7 @@ show_cli_menu() {
                DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần quản lý SSL")
                [ $? -ne 0 ] && continue
                execute_action "ssl" "$DOMAIN_PROMPT" 
+               [ $? -eq 2 ] && continue
                ;;
             3) 
                DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Deploy")
@@ -115,6 +116,7 @@ show_cli_menu() {
                DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền quản lý Database")
                [ $? -ne 0 ] && continue
                execute_action "manage-db" "$DOMAIN_PROMPT" 
+               [ $? -eq 2 ] && continue
                ;;
             9) 
                DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Xem Logs")

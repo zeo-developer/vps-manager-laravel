@@ -17,7 +17,7 @@ run_ssl_manager() {
     case $ssl_choice in
         1) install_ssl "$domain" ;;
         2) renew_ssl_all ;;
-        0) return ;;
+        0) return 2 ;;
         *) warn "Lựa chọn không hợp lệ."; run_ssl_manager "$domain" ;;
     esac
 }

@@ -19,7 +19,7 @@ run_manage_db() {
         1) change_db_password "$domain" ;;
         2) enable_remote_db "$domain" ;;
         3) disable_remote_db "$domain" ;;
-        0) return ;;
+        0) return 2 ;;
         *) warn "Lựa chọn không hợp lệ."; run_manage_db "$domain" ;;
     esac
 }
