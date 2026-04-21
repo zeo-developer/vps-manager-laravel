@@ -35,7 +35,7 @@ run_add_site() {
     sed -i "s/^PHP_VERSION=.*/PHP_VERSION=\"${PHP_VER_SELECTED}\"/" "$SITE_ENV"
     info "Đã chọn PHP ${PHP_VER_SELECTED} cho ${domain}."
 
-    # [FIX V18.2] Tự động cài đặt PHP PHP_VER_SELECTED nếu hệ thống chưa có
+    # Tự động cài đặt PHP PHP_VER_SELECTED nếu hệ thống chưa có
     if [ ! -d "/etc/php/${PHP_VER_SELECTED}/fpm" ]; then
         info "⚠️ Phát hiện PHP ${PHP_VER_SELECTED} chưa được cài đặt. Đang tiến hành cài đặt dặm..."
         apt-get update -y
@@ -73,7 +73,7 @@ run_add_site() {
     sed -i "s/^SSR_PORT=.*/SSR_PORT=\"${ssr_port}\"/" "$SITE_ENV"
 
     # 1.3 Sinh SSH Key độc lập (Multi-Git Support)
-    # [FIX V22.0] Di dời Key ra khỏi /root để www-data có thể đọc được
+    # Di dời Key ra khỏi /root để www-data có thể đọc được
     local ssh_key_dir="/var/www/.vps_keys"
     local app_user=${APP_USER:-"www-data"}
     local ssh_key_path="${ssh_key_dir}/id_ed25519_${domain}"
@@ -121,7 +121,7 @@ run_add_site() {
 
     mkdir -p "$target_dir/current/public"
     
-    # [FIX V27.2] Khởi tạo cấu trúc đầy đủ bằng lệnh tường minh (Tránh lỗi Brace Expansion)
+    # Khởi tạo cấu trúc đầy đủ bằng lệnh tường minh (Tránh lỗi Brace Expansion)
     info "Khởi tạo cấu trúc Shared Storage (Logs, Cache, Sessions)..."
     mkdir -p "$target_dir/shared/storage/logs"
     mkdir -p "$target_dir/shared/storage/app/public"
@@ -181,7 +181,7 @@ run_add_site() {
         chmod 644 "$ssr_supervisor_conf"
     fi
 
-    # [FIX V20.1] Bước nạp Crontab sẽ được chuyển sang giai đoạn Deploy để đảm bảo đường dẫn tồn tại
+    # Bước nạp Crontab sẽ được chuyển sang giai đoạn Deploy để đảm bảo đường dẫn tồn tại
 
     info "================================================================="
     info "🚀 THÀNH CÔNG: DỰ ÁN [ $domain ] ĐÃ SETUP HOÀN TẤT TRÊN SERVER."

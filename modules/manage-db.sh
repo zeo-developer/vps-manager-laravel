@@ -33,7 +33,7 @@ change_db_password() {
     echo -e "${YELLOW}Nhấn [Enter] để tự động tạo Mật khẩu siêu bảo mật (20 ký tự).${NC}"
     read -p "Nhập Mật khẩu Database Mới: " new_pass
     
-    # [FIX V33.0] Nếu để trống, tự động bốc pass ngẫu nhiên
+    # Nếu để trống, tự động bốc pass ngẫu nhiên
     if [ -z "$new_pass" ]; then
         new_pass=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 20)
         info "🎲 Đã tạo mật khẩu ngẫu nhiên: ${new_pass}"
@@ -41,7 +41,7 @@ change_db_password() {
 
     info "Đang thay đổi mật khẩu Database cho User ${DB_USER}..."
     
-    # [FIX V33.1] Lấy danh sách Host thực tế của User để tránh lỗi ERROR 1396 (User doesn't exist)
+    # Lấy danh sách Host thực tế của User để tránh lỗi ERROR 1396 (User doesn't exist)
     # Lệnh này sẽ trả về danh sách host (vd: localhost, %)
     local existing_hosts=$(sudo mysql -N -s -e "SELECT host FROM mysql.user WHERE user = '${DB_USER}';" 2>/dev/null)
     
@@ -66,7 +66,7 @@ change_db_password() {
         # 3. Cập nhật /var/www/${domain}/shared/.env (Laravel App)
         local shared_env="/var/www/${domain}/shared/.env"
         if [ -f "$shared_env" ]; then
-            # [FIX V33.0] Dùng dấu nháy để bọc pass chống lỗi ký tự đặc biệt
+            # Dùng dấu nháy để bọc pass chống lỗi ký tự đặc biệt
             sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=\"${new_pass}\"/" "$shared_env"
             info "Đã cập nhật mật khẩu vào file .env của Laravel."
             

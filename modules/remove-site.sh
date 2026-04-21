@@ -5,7 +5,7 @@
 run_remove_site() {
     local domain="$1"
 
-    # [FIX V21.0] Kiểm tra sự tồn tại của Site trước khi hỏi xoá
+    # Kiểm tra sự tồn tại của Site trước khi hỏi xoá
     local SITE_ENV="$SCRIPT_DIR/sites/.env.${domain}"
     if [ ! -f "$SITE_ENV" ]; then
         error "Tên miền [ $domain ] không tồn tại hoặc đã bị xóa trước đó."

@@ -5,7 +5,7 @@
 # Các biến đường dẫn sẽ được khởi tạo động bên trong hàm run_deploy
 
 run_deploy() {
-    # [FIX V31.0] Kiểm tra Website có tồn tại thật hay không (Dựa trên file env của site)
+    # Kiểm tra Website có tồn tại thật hay không (Dựa trên file env của site)
     local SITE_ENV_FILE="$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
     if [ ! -f "$SITE_ENV_FILE" ]; then
         error "❌ Lỗi: Website [ ${APP_DOMAIN} ] chưa được khởi tạo. Vui lòng sử dụng lệnh 'vps add-site' trước!"
@@ -14,20 +14,20 @@ run_deploy() {
 
     info "Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
 
-    # [FIX V18.2] Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
+    # Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
     local BASE_DIR="/var/www/${APP_DOMAIN}"
     local RELEASES_DIR="${BASE_DIR}/releases"
     local SHARED_DIR="${BASE_DIR}/shared"
     local CURRENT_DIR="${BASE_DIR}/current"
 
-    # [FIX V31.1] "Nhảy" vào vùng an toàn (BASE_DIR) để tránh lỗi getcwd() của www-data
+    # "Nhảy" vào vùng an toàn (BASE_DIR) để tránh lỗi getcwd() của www-data
     # Nếu đang đứng ở /root, user www-data sẽ không có quyền truy cập vào CWD hiện tại.
     cd "$BASE_DIR" || cd /tmp
 
-    # [FIX V18.2] Đảm bảo quyền sở hữu cho APP_USER
+    # Đảm bảo quyền sở hữu cho APP_USER
     chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
 
-    # [FIX V26.0] Kiểm tra và Hỏi Git Repo nếu chưa có
+    # Kiểm tra và Hỏi Git Repo nếu chưa có
     if [ -z "$GIT_REPO" ] || [ "$GIT_REPO" = "git_repo_url" ]; then
         info "⚠️ Cần cấu hình Git Repository cho website [ ${APP_DOMAIN} ]."
         while true; do
@@ -36,7 +36,7 @@ run_deploy() {
             # Gỡ bỏ khoảng trắng thừa
             input_repo=$(echo "$input_repo" | xargs)
 
-            # [FIX V26.0] Logic Tự động chuyển đổi HTTPS sang SSH (GitHub/GitLab/Bitbucket)
+            # Logic Tự động chuyển đổi HTTPS sang SSH (GitHub/GitLab/Bitbucket)
             if [[ "$input_repo" =~ ^https://(github\.com|gitlab\.com|bitbucket\.org)/(.+) ]]; then
                 local provider="${BASH_REMATCH[1]}"
                 local path="${BASH_REMATCH[2]}"
@@ -73,7 +73,7 @@ run_deploy() {
         done
     fi
 
-    # [FIX V27.2] Đảm bảo toàn bộ cấu trúc log tồn tại bằng lệnh tường minh (Tránh lỗi Brace Expansion)
+    # Đảm bảo toàn bộ cấu trúc log tồn tại bằng lệnh tường minh (Tránh lỗi Brace Expansion)
     mkdir -p "${RELEASES_DIR}"
     mkdir -p "${SHARED_DIR}/storage/logs"
     mkdir -p "${SHARED_DIR}/storage/app/public"
@@ -86,15 +86,15 @@ run_deploy() {
     local TIMESTAMP=$(date +"%Y%m%d%H%M%S")
     local NEW_RELEASE="${RELEASES_DIR}/${TIMESTAMP}"
 
-    # [FIX V25.1] Hàm dọn dẹp nội bộ nếu quy trình build thất bại
+    # Hàm dọn dẹp nội bộ nếu quy trình build thất bại
     cleanup_failed_release() {
         if [ -d "$NEW_RELEASE" ]; then
-            # [FIX V25.2] Quay về thư mục an toàn trước khi xóa thư mục hiện hành
+            # Quay về thư mục an toàn trước khi xóa thư mục hiện hành
             cd "$RELEASES_DIR" || cd /tmp
             warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
             rm -rf "$NEW_RELEASE"
 
-            # [FIX V28.1] Dọn dẹp Supervisor nếu là lần deploy ĐẦU TIÊN thất bại
+            # Dọn dẹp Supervisor nếu là lần deploy ĐẦU TIÊN thất bại
             # Nếu CURRENT_DIR không phải là symlink (tức là chưa từng deploy thành công)
             if [ ! -L "$CURRENT_DIR" ]; then
                 warn "Phát hiện deploy lần đầu thất bại. Đang tạm gỡ cấu hình Supervisor..."
@@ -109,7 +109,7 @@ run_deploy() {
 
     # Clone bằng quyền user ứng dụng với SSH Key riêng biệt
     info "Sử dụng SSH Key riêng biệt: $SSH_KEY_PATH"
-    # [FIX V18.2] Cho phép hiển thị lỗi git clone để dễ debug
+    # Cho phép hiển thị lỗi git clone để dễ debug
     sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
         git clone "$GIT_REPO" "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi: Không thể clone mã nguồn từ Git!"; return 1; }
 
@@ -124,31 +124,27 @@ run_deploy() {
             touch "${SHARED_DIR}/.env"
         fi
         
-        # Tiêm tự động (Inject) Thông số Database và Domain ngầm vào .env của Laravel
-        if [ -f "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}" ]; then
-            source "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
-            
-            sed -i "s|^APP_URL=.*|APP_URL=https://${APP_DOMAIN}|g" "${SHARED_DIR}/.env"
-            sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_NAME}/g" "${SHARED_DIR}/.env"
-            sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USER}/g" "${SHARED_DIR}/.env"
-            sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
-
-            # Đổi môi trường cơ bản thành Production
-            sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
-            sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
-        fi
-        
         chown "$APP_USER":"$APP_USER" "${SHARED_DIR}/.env"
-        
-        # [FIX V24.1] Khối này sẽ được dời xuống sau Composer Install để đảm bảo có vendor/autoload.php
-        info "Chuẩn bị file .env trong shared..."
+        info "Khởi tạo file .env thành công."
+    fi
+
+    # [UPDATE] Luôn cập nhật các thông số quan trọng để đảm bảo đồng bộ cấu hình
+    if [ -f "${SHARED_DIR}/.env" ]; then
+        info "Đảm bảo cấu hình .env chuẩn Production và đúng Domain..."
+        source "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
+        sed -i "s|^APP_URL=.*|APP_URL=https://${APP_DOMAIN}|g" "${SHARED_DIR}/.env"
+        sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_NAME}/g" "${SHARED_DIR}/.env"
+        sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USER}/g" "${SHARED_DIR}/.env"
+        sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
+        sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
+        sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
     fi
     
     # Xoá storage rỗng của git clone và chèn symlink tới shared/storage
     rm -rf "${NEW_RELEASE}/storage"
     sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage" || { cleanup_failed_release; error "Không thể tạo symlink cho storage"; return 1; }
     
-    # [FIX V24.1] Đảm bảo xoá file .env cũ trong source (nếu có) trước khi link
+    # Đảm bảo xoá file .env cũ trong source (nếu có) trước khi link
     rm -f "${NEW_RELEASE}/.env"
     sudo -u "$APP_USER" ln -s "${SHARED_DIR}/.env" "${NEW_RELEASE}/.env" || { cleanup_failed_release; error "Không thể tạo symlink cho .env"; return 1; }
 
@@ -156,12 +152,12 @@ run_deploy() {
     info "Trỏ đến $NEW_RELEASE: Cài đặt Composer Packages (Sử dụng PHP ${PHP_VERSION})..."
     cd "$NEW_RELEASE" || error "Không thể truy cập thư mục release: $NEW_RELEASE"
     
-    # [FIX V24.1] Ép chạy Composer bằng phiên bản PHP của dự án
+    # Ép chạy Composer bằng phiên bản PHP của dự án
     if [ -f "composer.json" ]; then
         sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || { cleanup_failed_release; error "Lỗi khi chạy composer install"; return 1; }
     fi
 
-    # [FIX V24.1] Di dời key:generate xuống sau khi đã có vendor/
+    # Di dời key:generate xuống sau khi đã có vendor/
     if [ -f "artisan" ]; then
         # Kiểm tra nếu chưa có APP_KEY trong .env thì mới tạo
         if ! grep -q "APP_KEY=base64:" "${SHARED_DIR}/.env"; then
@@ -170,7 +166,7 @@ run_deploy() {
         fi
     fi
     
-    # [FIX V24.1] Sửa quyền NPM Cache để tránh lỗi EACCES
+    # Sửa quyền NPM Cache để tránh lỗi EACCES
     mkdir -p /var/www/.npm
     chown -R "$APP_USER":"$APP_USER" /var/www/.npm
 
@@ -182,8 +178,11 @@ run_deploy() {
     fi
 
     # 4. Laravel Artisan commands (Sử dụng PHP ${PHP_VERSION})
-    info "Chạy Migrations và Optimizing Caches..."
+    info "Chạy Migrations, Storage Link và Optimizing Caches..."
     if [ -f "artisan" ]; then
+        # [NEW] Tạo liên kết storage của Laravel
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan storage:link --force || warn "⚠️ Không thể tạo storage:link"
+        
         sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
         sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
         sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
@@ -193,10 +192,14 @@ run_deploy() {
         warn "⚠️ Không tìm thấy file 'artisan', bỏ qua các lệnh Laravel."
     fi
 
-    # 4.1 Xử lý JWT Secret (Nếu có)
+    # 4.1 Xử lý JWT Secret (Chỉ tạo nếu chưa có để tránh đăng xuất người dùng)
     if [ "$USE_JWT" = "true" ]; then
-        info "Đang tạo JWT Secret phục vụ xác thực..."
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
+        if ! grep -q "JWT_SECRET=" "${SHARED_DIR}/.env" 2>/dev/null; then
+            info "Khởi tạo JWT Secret cho lần đầu sử dụng..."
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
+        else
+            info "Mã JWT Secret đã tồn tại. Giữ nguyên để duy trì phiên đăng nhập."
+        fi
     fi
 
     # 4.2 Xử lý Inertia SSR (Nếu có)
@@ -213,7 +216,7 @@ run_deploy() {
     # 5. Kích hoạt Zero-Downtime Symlink
     info "Hoán đổi symlink gốc 'current' sang bản Release mới nhất..."
     
-    # [FIX V31.2] Nếu 'current' là thư mục thật (nháp từ add-site), phải xóa để ln tạo được symlink chuẩn
+    # Nếu 'current' là thư mục thật (nháp từ add-site), phải xóa để ln tạo được symlink chuẩn
     if [ -d "$CURRENT_DIR" ] && [ ! -L "$CURRENT_DIR" ]; then
         warn "Dọn dẹp thư mục nháp 'current' để khởi tạo cấu trúc Zero-Downtime Symlink..."
         rm -rf "$CURRENT_DIR"
@@ -224,12 +227,12 @@ run_deploy() {
     # Restart php-fpm mềm để giải phóng OPcache cũ
     systemctl reload "php${PHP_VERSION}-fpm"
     
-    # [FIX V20.1] Kích hoạt Supervisor (Lần đầu hoặc Cập nhật)
+    # Kích hoạt Supervisor (Lần đầu hoặc Cập nhật)
     info "Đang nạp cấu hình Supervisor và kích hoạt Workers..."
     supervisorctl reread
     supervisorctl update
     
-    # [FIX V32.0] Nghỉ 1 giây để Supervisor kịp nhận diện các Group mới
+    # Nghỉ 1 giây để Supervisor kịp nhận diện các Group mới
     sleep 1
     
     # Restart/Start Laravel Queue workers / SSR
@@ -241,7 +244,7 @@ run_deploy() {
         supervisorctl restart "ssr-${APP_DOMAIN}" || supervisorctl start "ssr-${APP_DOMAIN}" || warn "⚠️ Không thể khởi động SSR, hãy kiểm tra log Supervisor."
     fi
 
-    # [FIX V20.1] Đăng ký Cronjob Laravel Scheduler (Chỉ chạy khi có code)
+    # Đăng ký Cronjob Laravel Scheduler (Chỉ chạy khi có code)
     info "Đảm bảo Laravel Scheduler (Cronjob) đã được đăng ký..."
     local CRON_CMD="* * * * * cd ${CURRENT_DIR} && php${PHP_VERSION} artisan schedule:run >> /dev/null 2>&1"
     if ! sudo -u "$APP_USER" crontab -l 2>/dev/null | grep -q "cd ${CURRENT_DIR}"; then
@@ -263,7 +266,7 @@ run_deploy() {
 }
 
 run_rollback() {
-    # [FIX V30.0] Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
+    # Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
     local BASE_DIR="/var/www/${APP_DOMAIN}"
     local RELEASES_DIR="${BASE_DIR}/releases"
     local CURRENT_DIR="${BASE_DIR}/current"
@@ -285,7 +288,7 @@ run_rollback() {
 
     cd "$RELEASES_DIR" || { error "Không tìm kiếm được thư mục $RELEASES_DIR"; return 1; }
     
-    # [FIX V30.1] Xác định bản hiện tại (lỗi) và bản trước đó (để rollback)
+    # Xác định bản hiện tại (lỗi) và bản trước đó (để rollback)
     local CURRENT_FAILED_RELEASE_NAME=$(ls -1t | sed -n '1p')
     local PREV_RELEASE_NAME=$(ls -1t | sed -n '2p')
     
@@ -297,7 +300,7 @@ run_rollback() {
     local TARGET_ROLLBACK="${RELEASES_DIR}/${PREV_RELEASE_NAME}"
     local CURRENT_FAILED_RELEASE="${RELEASES_DIR}/${CURRENT_FAILED_RELEASE_NAME}"
 
-    # [FIX V30.4] Kiểm tra & Hỏi xác nhận Rollback Database Thủ công
+    # Kiểm tra & Hỏi xác nhận Rollback Database Thủ công
     echo ""
     warn "=========================================================================="
     warn "⚠️  CẢNH BÁO QUAN TRỌNG VỀ DATABASE (DỮ LIỆU)  ⚠️"
@@ -327,7 +330,7 @@ run_rollback() {
     info "Đang khôi phục symlink current về phiên bản ổn định: $PREV_RELEASE_NAME..."
     sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR" || { error "Không thể hoán đổi symlink"; return 1; }
 
-    # [FIX V30.8] Xóa bỏ hoàn toàn bản release lỗi để dọn dẹp hệ thống
+    # Xóa bỏ hoàn toàn bản release lỗi để dọn dẹp hệ thống
     if [ -d "$CURRENT_FAILED_RELEASE" ]; then
         info "Đang xóa bỏ bản release lỗi vừa rồi để dọn dẹp hệ thống..."
         rm -rf "$CURRENT_FAILED_RELEASE"

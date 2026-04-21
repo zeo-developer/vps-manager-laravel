@@ -17,7 +17,7 @@ run_db_setup() {
     # Thiết lập mật khẩu Root (Dùng cho Tool quản trị)
     info "Đang thiết lập bảo mật và mật khẩu Root cho MariaDB..."
     
-    # [FIX V16.0] Sử dụng mariadb-admin để đặt mật khẩu (Cách cực kỳ ổn định)
+    # Sử dụng mariadb-admin để đặt mật khẩu (Cách cực kỳ ổn định)
     if sudo mariadb-admin -u root password "${DB_ROOT_PASSWORD}" >/dev/null 2>&1; then
         info "✅ [THÀNH CÔNG] MariaDB Root Password đã được thiết lập qua mariadb-admin."
     else

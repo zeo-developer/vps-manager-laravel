@@ -74,14 +74,14 @@ run_system_setup() {
     local USER_HOME=$(getent passwd "$APP_USER" | cut -d: -f6)
     USER_HOME="${USER_HOME:-/home/$APP_USER}"
     
-    # [FIX V15.0] Đảm bảo thư mục gốc (vd: /var/www) tồn tại
+    # Đảm bảo thư mục gốc (vd: /var/www) tồn tại
     if [ ! -d "$USER_HOME" ]; then
         info "Khởi tạo thư mục Home [ $USER_HOME ]..."
         mkdir -p "$USER_HOME"
         chown "$APP_USER":"$APP_USER" "$USER_HOME"
     fi
 
-    # [FIX V15.0] Tạo .ssh và sinh Key bằng quyền Root (An toàn nhất)
+    # Tạo .ssh và sinh Key bằng quyền Root (An toàn nhất)
     mkdir -p "${USER_HOME}/.ssh"
     chmod 700 "${USER_HOME}/.ssh"
     
@@ -90,7 +90,7 @@ run_system_setup() {
         ssh-keygen -t ed25519 -C "deploy_vps_manager" -N "" -f "${USER_HOME}/.ssh/id_ed25519" -q
     fi
     
-    # [FIX V15.0] Bypass StrictHostKeyChecking cho các provider phổ biến
+    # Bypass StrictHostKeyChecking cho các provider phổ biến
     cat <<'EOF' > "${USER_HOME}/.ssh/config"
 Host github.com
     StrictHostKeyChecking no
