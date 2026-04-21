@@ -27,9 +27,9 @@ run_site_info() {
 
     local SAFE_DOMAIN=$(get_safe_domain "$domain")
 
-    # Kiểm tra Queue Worker
+    # Kiểm tra Queue Worker (Hỗ trợ cả trường hợp numprocs > 1)
     local queue_status="${RED}Không chạy${NC}"
-    if supervisorctl status "${SAFE_DOMAIN}:${SAFE_DOMAIN}-worker" 2>/dev/null | grep -q "RUNNING"; then
+    if supervisorctl status "${SAFE_DOMAIN}:" 2>/dev/null | grep "${SAFE_DOMAIN}-worker" | grep -q "RUNNING"; then
         queue_status="${GREEN}Đang hoạt động${NC}"
     fi
 
