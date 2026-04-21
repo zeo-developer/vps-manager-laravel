@@ -253,8 +253,7 @@ run_deploy() {
         info "RELEASE MỚI: $TIMESTAMP"
         info "================================================================="
     fi
-}
-    
+
     # Móc call API Report (Module monitor)
     # bash monitor.sh send_telegram "Deploy Thành Công lên release: ${TIMESTAMP}"
 }
