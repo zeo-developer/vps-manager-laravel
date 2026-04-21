@@ -25,9 +25,17 @@ run_site_info() {
         nginx_status="${GREEN}Đang hoạt động${NC}"
     fi
 
+    local SAFE_DOMAIN=$(get_safe_domain "$domain")
+
+    # Kiểm tra Queue Worker
+    local queue_status="${RED}Không chạy${NC}"
+    if supervisorctl status "${SAFE_DOMAIN}:${SAFE_DOMAIN}-worker" 2>/dev/null | grep -q "RUNNING"; then
+        queue_status="${GREEN}Đang hoạt động${NC}"
+    fi
+
     # Kiểm tra SSR Worker
     local ssr_status="${RED}Không chạy${NC}"
-    if supervisorctl status "ssr-${domain}" > /dev/null 2>&1 | grep -q "RUNNING"; then
+    if supervisorctl status "${SAFE_DOMAIN}:${SAFE_DOMAIN}-ssr" 2>/dev/null | grep -q "RUNNING"; then
         ssr_status="${GREEN}Đang hoạt động (Cổng: ${SSR_PORT:-13714})${NC}"
     fi
 
