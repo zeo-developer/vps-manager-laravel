@@ -89,6 +89,8 @@ select_site_menu() {
     
     if [ ${#sites[@]} -eq 0 ]; then
         error "Hiện chưa có Website nào được tạo! Vui lòng chọn mục '1. Thêm Website' trước." >&2
+        echo -e "" >&2
+        read -p "Nhấn [Enter] để tiếp tục..." >&2
         return 1
     fi
 
