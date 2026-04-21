@@ -54,6 +54,12 @@ check_all_sites() {
         local chk_domain=$(grep -oP "(?<=^APP_DOMAIN=\")[^\"]+" "$env_file" || echo "")
         
         if [ ! -z "$chk_domain" ]; then
+            # Bỏ qua nếu Website chưa được deploy thực sự (chưa có symlink current)
+            if [ ! -L "/var/www/${chk_domain}/current" ]; then
+                info "Bỏ qua [ $chk_domain ]: Website chưa được triển khai mã nguồn (Deploy)."
+                continue
+            fi
+
             local check_url=$( (source "$env_file" >/dev/null 2>&1; eval echo \$HEALTH_CHECK_URL) )
             if [ -z "$check_url" ] || [ "$check_url" = 'https:///up' ]; then
                 check_url="https://${chk_domain}/up"
