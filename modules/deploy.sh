@@ -243,7 +243,7 @@ run_deploy() {
 
     # [FIX V20.1] Đăng ký Cronjob Laravel Scheduler (Chỉ chạy khi có code)
     info "Đảm bảo Laravel Scheduler (Cronjob) đã được đăng ký..."
-    local CRON_CMD="* * * * * cd ${CURRENT_DIR} && php artisan schedule:run >> /dev/null 2>&1"
+    local CRON_CMD="* * * * * cd ${CURRENT_DIR} && php${PHP_VERSION} artisan schedule:run >> /dev/null 2>&1"
     if ! sudo -u "$APP_USER" crontab -l 2>/dev/null | grep -q "cd ${CURRENT_DIR}"; then
         (sudo -u "$APP_USER" crontab -l 2>/dev/null; echo "$CRON_CMD") | sudo -u "$APP_USER" crontab -
         info "✅ Crontab Scheduler cho domain [ ${APP_DOMAIN} ] đã được kích hoạt."
