@@ -28,8 +28,15 @@ require_root() {
     fi
 }
 
+# Xoá các biến môi trường của Site trước khi nạp Site mới để tránh rò rỉ dữ liệu (Env Leak)
+reset_env_vars() {
+    unset APP_DOMAIN PHP_VERSION USE_JWT USE_SSR SSR_PORT SSH_KEY_PATH
+    unset DB_NAME DB_USER DB_PASSWORD GIT_REPO HEALTH_CHECK_URL
+}
+
 # Quản lý Đọc Config (Global & Domain-Specific)
 load_env() {
+    reset_env_vars
     local domain="$1"
     # Load Global Settings (Telegram mappers, Default PHP...)
     if [ -f "$SCRIPT_DIR/.env" ]; then
