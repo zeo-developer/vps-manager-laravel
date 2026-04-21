@@ -134,14 +134,6 @@ run_deploy() {
                 cd "$RELEASES_DIR" || cd /tmp
                 warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
                 rm -rf "$NEW_RELEASE"
-
-                if [ ! -L "$CURRENT_DIR" ]; then
-                    warn "Phát hiện deploy lần đầu thất bại. Đang tạm gỡ cấu hình Supervisor..."
-                    local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
-                    rm -f "/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
-                    supervisorctl reread > /dev/null 2>&1
-                    supervisorctl update > /dev/null 2>&1
-                fi
             fi
         }
 
