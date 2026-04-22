@@ -46,15 +46,17 @@ run_site_info() {
     if [ -n "${SSH_KEY_PATH:-}" ]; then
         local resolved_pub
         resolved_pub=$(realpath "${SSH_KEY_PATH}.pub" 2>/dev/null || true)
-        local safe_key_dir
-        safe_key_dir=$(realpath "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")
-        # Chỉ đọc nếu file .pub nằm trong SCRIPT_DIR và đúng extension
-        if [[ "$resolved_pub" == "${safe_key_dir}"* ]] && \
-           [[ "$resolved_pub" == *.pub ]] && \
-           [ -f "$resolved_pub" ]; then
+        
+        # Chỉ đọc nếu file .pub nằm trong SCRIPT_DIR hoặc /var/www/.vps_keys
+        local script_path
+        script_path=$(realpath "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")
+        local global_key_path="/var/www/.vps_keys"
+
+        if [[ "$resolved_pub" == *.pub ]] && [ -f "$resolved_pub" ] && \
+           ([[ "$resolved_pub" == "${script_path}"* ]] || [[ "$resolved_pub" == "${global_key_path}"* ]]); then
             public_key=$(cat "$resolved_pub")
         else
-            public_key="[INVALID PATH — xem lại SSH_KEY_PATH trong sites/.env.${domain}]"
+            public_key="[INVALID PATH hoặc TRUY CẬP BỊ CHẶN]"
         fi
     fi
 
