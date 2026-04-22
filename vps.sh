@@ -89,9 +89,12 @@ show_cli_menu() {
         echo -e " ${GREEN}10.${NC} Thêm Custom Queue Worker"
         echo -e " ${YELLOW}11.${NC} Cập nhật Lõi Máy chủ (OS Updater)"
         echo -e " ${YELLOW}12.${NC} Cấu hình & Bật Giám sát Telegram (Monitor/Cron)"
+        echo -e " ${GREEN}13.${NC} Đổi Tên Miền Website (Rename Domain)"
+        echo -e " ${GREEN}14.${NC} Thêm Domain Alias (Multi-Domain)"
+        echo -e " ${GREEN}15.${NC} Xóa Domain Alias"
         echo -e " ${RED}0.${NC} Thoát Tool"
         echo -e "------------------------------------------"
-        read -p "Xin mời nhập lựa chọn (0-12): " choice
+        read -p "Xin mời nhập lựa chọn (0-15): " choice
 
         DOMAIN_PROMPT=""
         case $choice in
@@ -159,6 +162,24 @@ show_cli_menu() {
                ;;
             11) execute_action "update" ;;
             12) execute_action "monitor" ;;
+            13)
+               # Rename Domain: chọn domain cũ từ menu, rồi nhập domain mới
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền CŨ cần đổi")
+               [ $? -ne 0 ] && continue
+               read -p "Nhập Tên miền MỚI muốn đổi sang (vd: newsite.com): " NEW_DOMAIN_PROMPT
+               NEW_DOMAIN_PROMPT=$(sanitize_input "$NEW_DOMAIN_PROMPT")
+               execute_action "rename-domain" "$DOMAIN_PROMPT" "$NEW_DOMAIN_PROMPT"
+               ;;
+            14)
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền chính muốn thêm Alias")
+               [ $? -ne 0 ] && continue
+               execute_action "add-alias" "$DOMAIN_PROMPT" ""
+               ;;
+            15)
+               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền chính muốn xóa Alias")
+               [ $? -ne 0 ] && continue
+               execute_action "remove-alias" "$DOMAIN_PROMPT" ""
+               ;;
             0) exit 0 ;;
             *) warn "Lựa chọn không hợp lệ." ;;
         esac
@@ -262,6 +283,45 @@ execute_action() {
             source "$SCRIPT_DIR/modules/monitor.sh"
             run_monitor
             ;;
+        rename-domain)
+            require_root
+            if [ -z "$domain_arg" ]; then error "Cần cụ pháp: ./vps.sh rename-domain old.com new.com"; return 1; fi
+            if [ -z "$extra_arg" ]; then error "Cần cự pháp: ./vps.sh rename-domain old.com new.com"; return 1; fi
+            # Validate cả 2 domain
+            local domain_regex='^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*\.[a-zA-Z]{2,}$'
+            if [[ ! "$extra_arg" =~ $domain_regex ]] || [ ${#extra_arg} -gt 253 ]; then
+                error "Tên miền mới '$extra_arg' bị sai định dạng!"
+                return 1
+            fi
+            source "$SCRIPT_DIR/modules/rename-domain.sh"
+            run_rename_domain "$domain_arg" "$extra_arg"
+            ;;
+        add-alias)
+            require_root
+            if [ -z "$domain_arg" ]; then error "Cần cụ pháp: ./vps.sh add-alias primary.com alias.com"; return 1; fi
+            load_env "$domain_arg"
+            source "$SCRIPT_DIR/modules/alias.sh"
+            if [ -n "$extra_arg" ]; then
+                # CLI mode: ./vps.sh add-alias primary.com alias.com
+                run_add_alias "$domain_arg" "$extra_arg"
+            else
+                # Interactive mode: nhập alias từ bàn phím
+                run_manage_alias "$domain_arg"
+            fi
+            ;;
+        remove-alias)
+            require_root
+            if [ -z "$domain_arg" ]; then error "Cần cự pháp: ./vps.sh remove-alias primary.com alias.com"; return 1; fi
+            load_env "$domain_arg"
+            source "$SCRIPT_DIR/modules/alias.sh"
+            if [ -n "$extra_arg" ]; then
+                # CLI mode: ./vps.sh remove-alias primary.com alias.com
+                run_remove_alias "$domain_arg" "$extra_arg"
+            else
+                # Interactive mode: mục 2 trong manage_alias
+                run_manage_alias "$domain_arg"
+            fi
+            ;;
         *)
             error "Lệnh '${cmd}' không tồn tại."
             ;;
@@ -272,6 +332,6 @@ execute_action() {
 if [ $# -eq 0 ]; then
     show_cli_menu
 else
-    # Gõ thẳng command
-    execute_action "$1" "$2" "$3"
+    # Gõ thẳng command (hỗ trợ đến 4 tham số)
+    execute_action "$1" "${2:-}" "${3:-}"
 fi

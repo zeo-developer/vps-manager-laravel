@@ -125,6 +125,12 @@ run_add_site() {
     sed -i "s/^DB_NAME=.*/DB_NAME=\"${raw_db_name}\"/" "$SITE_ENV"
     sed -i "s/^DB_USER=.*/DB_USER=\"${raw_db_name}\"/" "$SITE_ENV"
     sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=\"${raw_db_pass}\"/" "$SITE_ENV"
+    # Khởi tạo DOMAIN_ALIASES rỗng
+    if grep -q "^DOMAIN_ALIASES=" "$SITE_ENV"; then
+        sed -i "s/^DOMAIN_ALIASES=.*/DOMAIN_ALIASES=\"\"/" "$SITE_ENV"
+    else
+        echo 'DOMAIN_ALIASES=""' >> "$SITE_ENV"
+    fi
 
     info "File cấu hình môi trường đã được tạo tại: sites/.env.${domain}"
 
@@ -165,6 +171,7 @@ run_add_site() {
     cat "$SCRIPT_DIR/configs/nginx-template.conf" \
         | sed "s/{{APP_DOMAIN}}/$domain/g" \
         | sed "s/{{PHP_VERSION}}/$php_ver/g" \
+        | sed "s/{{DOMAIN_ALIASES}}//g" \
         > "$nginx_conf"
 
     ln -nfs "$nginx_conf" "/etc/nginx/sites-enabled/$domain"

@@ -26,21 +26,40 @@ install_ssl() {
     local domain="$1"
     info "Bắt đầu quy trình cài đặt SSL Let's Encrypt cho ${domain}..."
     warn "Đảm bảo bạn đã trỏ IP Domain về Server thành công trước khi cài."
-    
+
     # Kiểm tra xem domain đã được cấu hình nginx chưa
     if [ ! -f "/etc/nginx/sites-available/$domain" ]; then
         error "Không tìm thấy file cấu hình Nginx cho ${domain}. Hãy Add Site trước."
+        return 1
     fi
 
-    # Chạy certbot
-    # --nginx: Tự động sửa cấu hình nginx
-    # --non-interactive: Chạy không cần can thiệp
-    # --agree-tos: Đồng ý điều khoản
-    # --register-unsafely-without-email: Không cần email (có thể đăng ký sau)
-    if certbot --nginx -d "$domain" --non-interactive --agree-tos --register-unsafely-without-email; then
+    # ―― Build chuỗi -d flags từ APP_DOMAIN + DOMAIN_ALIASES ―――――――――――――――――――
+    local d_flags="-d ${domain}"
+    local aliases="${DOMAIN_ALIASES:-}"
+    if [ -n "$aliases" ]; then
+        info "Phát hiện alias: ${aliases}"
+        info "Đang cài SSL SAN cert cover cả domain chính và alias..."
+        for alias in $aliases; do
+            d_flags="${d_flags} -d ${alias}"
+        done
+    fi
+
+    # ―― Xác định cự dùng --expand (cert đã có) hay cài mới ―――――――――――――――――
+    local expand_flag=""
+    if [ -d "/etc/letsencrypt/live/${domain}" ]; then
+        expand_flag="--expand"
+        info "Cert đã tồn tại — dùng --expand để mở rộng thêm domain mới vào cert..."
+    fi
+
+    # ―― Chạy certbot ――――――――――――――――――――――――――――――――――――――――
+    # shellcheck disable=SC2086  # Word splitting intentional cho d_flags
+    if certbot --nginx $d_flags $expand_flag \
+            --non-interactive --agree-tos --register-unsafely-without-email; then
         info "================================================================="
-        info "✅ THÀNH CÔNG: SSL ĐÃ ĐƯỢC CÀI ĐẶT CHO [ ${domain} ]"
-        info "Website của bạn giờ đã có thể truy cập qua HTTPS."
+        info "✅ THÀNH CÔNG: SSL ĐÃ ĐƯỢC CÀI/CẬP NHẬT CHO [ ${domain} ]"
+        if [ -n "$aliases" ]; then
+            info "   Cert cover thêm: ${aliases}"
+        fi
         info "================================================================="
     else
         warn "Cài đặt SSL thất bại. Vui lòng kiểm tra lại DNS hoặc Logs của Certbot."
