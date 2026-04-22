@@ -125,7 +125,13 @@ run_rename_domain() {
         rm -f "$old_sup"
         supervisorctl reread
         supervisorctl update
-        supervisorctl restart "${NEW_SAFE}:*" 2>/dev/null || true
+        
+        # Chỉ restart nếu dự án đã thực sự được Deploy (tồn tại thư mục current)
+        if [ -L "/var/www/${new_domain}/current" ]; then
+            supervisorctl restart "${NEW_SAFE}:*" 2>/dev/null || true
+        else
+            info "Bỏ qua restart Supervisor vì dự án chưa được Deploy mã nguồn."
+        fi
     fi
 
     # ── 7. Cập nhật APP_URL trong shared/.env Laravel ────────────────────────
