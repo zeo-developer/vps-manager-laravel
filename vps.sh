@@ -49,7 +49,7 @@ reset_env_vars() {
 # Quản lý Đọc Config (Global & Domain-Specific)
 load_env() {
     reset_env_vars
-    local domain="$1"
+    local domain="${1:-}"
     # Load Global Settings (Telegram mappers, Default PHP...)
     if [ -f "$SCRIPT_DIR/.env" ]; then
         harden_permissions "$SCRIPT_DIR/.env"
@@ -65,7 +65,7 @@ load_env() {
         if [ -f "$site_env" ]; then
             harden_permissions "$site_env"
             validate_env_file "$site_env" && source "$site_env"
-        elif [ "$2" != "--skip-check" ]; then
+        elif [ "${2:-}" != "--skip-check" ]; then
             error "Không tìm thấy cấu hình cho site: $domain (tại sites/.env.$domain)"
         fi
     fi

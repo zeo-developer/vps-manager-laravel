@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # modules/utils.sh
 # Các hàm tiện ích dùng chung cho Hệ thống VPS Manager
-set -uo pipefail   # Bắt lỗi unbound variable và pipeline fail
+# Lưu ý: Không đặt 'set -uo pipefail' trong file này vì nó là library (source'd),
+# việc đặt set option trong sourced file sẽ contaminate toàn bộ parent shell.
 
 # Màu hiển thị log Terminal
 RED='\033[0;31m'

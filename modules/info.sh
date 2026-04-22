@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # modules/info.sh
 # Xem thông tin cấu hình chi tiết của 1 Website
-set -uo pipefail   # Bắt lỗi unbound variable và pipeline fail (không dùng -e để giữ menu cuầm khi có lỗi)
 
 run_site_info() {
     local domain="$1"
