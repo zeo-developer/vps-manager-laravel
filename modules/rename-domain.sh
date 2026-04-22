@@ -15,7 +15,27 @@ run_rename_domain() {
         return 1
     fi
     if [ -f "$NEW_ENV" ]; then
-        error "Domain '$new_domain' đã tồn tại. Hủy để bảo vệ cấu hình cũ."
+        error "Domain '$new_domain' đã là domain chính của một dự án khác."
+        return 1
+    fi
+
+    # Quét xem new_domain có đang được dùng làm alias ở bất kỳ web nào không
+    local conflict_file=""
+    for env_file in "$SCRIPT_DIR/sites/".env.*; do
+        [ -f "$env_file" ] || continue
+        if grep "^DOMAIN_ALIASES=" "$env_file" 2>/dev/null | grep -qw "$new_domain"; then
+            conflict_file="$env_file"
+            break
+        fi
+    done
+
+    if [ -n "$conflict_file" ]; then
+        # Trích xuất tên domain chính đang giữ alias từ tên file (vd: .env.site.com -> site.com)
+        local conflict_domain
+        conflict_domain=$(basename "$conflict_file" | sed 's/^\.env\.//')
+        
+        error "Domain '${new_domain}' đang được sử dụng làm Bí danh (Alias) cho Website: ${conflict_domain}"
+        error "Vui lòng vào mục Quản lý Alias của web [${conflict_domain}] gỡ bí danh này ra trước."
         return 1
     fi
 
