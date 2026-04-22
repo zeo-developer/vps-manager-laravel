@@ -7,7 +7,7 @@ run_site_info() {
     local SITE_ENV="$SCRIPT_DIR/sites/.env.${domain}"
     
     if [ ! -f "$SITE_ENV" ]; then
-        error "Không tìm thấy cấu hình cho site: $domain"
+        error "Lỗi: Site '$domain' không tồn tại."
         return 1
     fi
 
@@ -41,7 +41,7 @@ run_site_info() {
         ssr_status="${GREEN}Đang hoạt động (Cổng: ${SSR_PORT:-13714})${NC}"
     fi
 
-    # Lấy SSH Public Key (validate path để tránh path traversal)
+    # Lấy SSH Public Key
     local public_key="Không tìm thấy SSH Key"
     if [ -n "${SSH_KEY_PATH:-}" ]; then
         local resolved_pub
@@ -59,26 +59,20 @@ run_site_info() {
     fi
 
     echo -e "${CYAN}==========================================${NC}"
-    echo -e "${CYAN}      THÔNG TIN WEBSITE: ${domain}        ${NC}"
+    echo -e "${CYAN}        SITE INFORMATION: ${domain}       ${NC}"
     echo -e "${CYAN}==========================================${NC}"
     echo -e " ${BLUE}Domain        :${NC} ${domain}"
     echo -e " ${BLUE}PHP Version   :${NC} ${PHP_VERSION}"
     echo -e " ${BLUE}Web Root      :${NC} /var/www/${domain}"
     echo -e " ${BLUE}Database Name :${NC} ${DB_NAME}"
     echo -e " ${BLUE}Database User :${NC} ${DB_USER}"
-    # Che mật khẩu — không in plaintext ra terminal
-    local masked_pass="[hidden]"
-    if [ -n "${DB_PASSWORD:-}" ]; then
-        local pass_len=${#DB_PASSWORD}
-        masked_pass="${DB_PASSWORD:0:2}$(printf '%0.s*' $(seq 1 $((pass_len - 2))))  (${pass_len} ký tự)"
-    fi
-    echo -e " ${BLUE}Database Pass :${NC} ${masked_pass}"
+    echo -e " ${BLUE}Database Pass :${NC} ${DB_PASSWORD:-'(n/a)'}"
     echo -e " ${BLUE}SSL Status    :${NC} ${ssl_status}"
-    echo -e " ${BLUE}Nginx Config  :${NC} ${nginx_status}"
+    echo -e " ${BLUE}Nginx Status  :${NC} ${nginx_status}"
     echo -e " ${BLUE}Queue Worker  :${NC} ${queue_status}"
     echo -e " ${BLUE}SSR Service   :${NC} ${ssr_status}"
     echo -e "------------------------------------------"
-    echo -e " ${CYAN}🔑 SSH PUBLIC KEY (Deploy Key):${NC}"
+    echo -e " ${CYAN}SSH Public Key (Deploy Key):${NC}"
     echo -e "${YELLOW}${public_key}${NC}"
     echo -e "------------------------------------------"
 }
