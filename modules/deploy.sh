@@ -105,6 +105,7 @@ run_deploy() {
             git pull origin main || { error "Lỗi khi chạy git pull"; return 1; }
 
         # Cài đặt Composer (nhanh)
+        if [ -f "composer.json" ]; then
             info "Cài đặt Composer dependencies..."
             sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || { error "Lỗi khi chạy composer install"; return 1; }
         fi
