@@ -24,7 +24,7 @@ fi
 source "$SCRIPT_DIR/modules/utils.sh"
 require_root() {
     if [ "$EUID" -ne 0 ]; then
-        error "Tính năng này cần quyền root (sudo). Vui lòng thử lại: sudo ./vps.sh"
+        error "Quyền root (sudo) là bắt buộc. Vui lòng thử lại: sudo ./vps.sh"
     fi
 }
 
@@ -55,7 +55,7 @@ load_env() {
         harden_permissions "$SCRIPT_DIR/.env"
         validate_env_file "$SCRIPT_DIR/.env" && source "$SCRIPT_DIR/.env"
     else
-        warn "Không tìm thấy cấu hình chung .env tại $SCRIPT_DIR, dùng .env.global.example..."
+        warn "Không tìm thấy .env tại $SCRIPT_DIR. Sử dụng .env.global.example..."
         validate_env_file "$SCRIPT_DIR/.env.global.example" && source "$SCRIPT_DIR/.env.global.example"
     fi
 
@@ -75,47 +75,47 @@ show_cli_menu() {
     while true; do
         clear || true
         echo -e "${CYAN}==========================================${NC}"
-        echo -e "${CYAN}     VPS MANAGER CLI - PRO EDITION        ${NC}"
+        echo -e "${CYAN}        VPS MANAGER DASHBOARD             ${NC}"
         echo -e "${CYAN}==========================================${NC}"
-        echo -e " ${GREEN}1.${NC} Thêm Website (Add Site)"
-        echo -e " ${GREEN}2.${NC} Cài đặt / Quản lý SSL (SSL Manager)"
-        echo -e " ${GREEN}3.${NC} Triển khai Mã nguồn (Deploy Zero-Downtime)"
-        echo -e " ${GREEN}4.${NC} Khôi phục Khẩn cấp (Rollback Release)"
-        echo -e " ${GREEN}5.${NC} Xóa toàn bộ Website (Remove Site)"
-        echo -e " ${GREEN}6.${NC} Xem Thông tin Website (Site Info)"
-        echo -e " ${GREEN}7.${NC} Thay đổi Phiên bản PHP"
-        echo -e " ${GREEN}8.${NC} Quản lý Cơ sở dữ liệu (Database Manager)"
-        echo -e " ${GREEN}9.${NC} Trình Xem Logs (View Realtime Logs)"
+        echo -e " ${GREEN}1.${NC} Thêm Website"
+        echo -e " ${GREEN}2.${NC} Quản lý SSL"
+        echo -e " ${GREEN}3.${NC} Triển khai mã nguồn (Zero-Downtime)"
+        echo -e " ${GREEN}4.${NC} Khôi phục phiên bản (Rollback)"
+        echo -e " ${GREEN}5.${NC} Xóa hoàn toàn Website"
+        echo -e " ${GREEN}6.${NC} Xem thông tin Website"
+        echo -e " ${GREEN}7.${NC} Thay đổi phiên bản PHP"
+        echo -e " ${GREEN}8.${NC} Quản lý Cơ sở dữ liệu"
+        echo -e " ${GREEN}9.${NC} Xem Logs (Realtime)"
         echo -e " ${GREEN}10.${NC} Thêm Custom Queue Worker"
-        echo -e " ${YELLOW}11.${NC} Cập nhật Lõi Máy chủ (OS Updater)"
-        echo -e " ${YELLOW}12.${NC} Cấu hình & Bật Giám sát Telegram (Monitor/Cron)"
-        echo -e " ${GREEN}13.${NC} Đổi Tên Miền Website (Rename Domain)"
-        echo -e " ${GREEN}14.${NC} Thêm Domain Alias (Multi-Domain)"
+        echo -e " ${YELLOW}11.${NC} Cập nhật máy chủ (OS Update)"
+        echo -e " ${YELLOW}12.${NC} Giám sát hệ thống (Telegram Monitor)"
+        echo -e " ${GREEN}13.${NC} Đổi tên miền Website"
+        echo -e " ${GREEN}14.${NC} Thêm Domain Alias"
         echo -e " ${GREEN}15.${NC} Xóa Domain Alias"
-        echo -e " ${RED}0.${NC} Thoát Tool"
+        echo -e " ${RED}0.${NC} Thoát"
         echo -e "------------------------------------------"
-        read -p "Xin mời nhập lựa chọn (0-15): " choice
+        read -p "Nhập lựa chọn (0-15): " choice
 
         DOMAIN_PROMPT=""
         case $choice in
             1) 
-               read -p "Nhập Tên miền cho dự án mới (vd: demo.com): " DOMAIN_PROMPT
+               read -p "Nhập domain mới (vd: demo.com): " DOMAIN_PROMPT
                DOMAIN_PROMPT=$(sanitize_input "$DOMAIN_PROMPT")
                execute_action "add-site" "$DOMAIN_PROMPT" 
                ;;
             2) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần quản lý SSL")
+               DOMAIN_PROMPT=$(select_site_menu "Quản lý SSL cho domain")
                [ $? -ne 0 ] && continue
                execute_action "ssl" "$DOMAIN_PROMPT" 
                [ $? -eq 2 ] && continue
                ;;
             3) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Deploy")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain triển khai (Deploy)")
                [ $? -ne 0 ] && continue
                
                echo -e "Chọn chế độ triển khai:"
-               echo -e " ${GREEN}1.${NC} Zero-Downtime (An toàn, mặc định)"
-               echo -e " ${YELLOW}2.${NC} Quick Deploy (Nhanh, chỉ dành cho máy đã có cấu hình)"
+               echo -e " ${GREEN}1.${NC} Zero-Downtime (Mặc định)"
+               echo -e " ${YELLOW}2.${NC} Quick Deploy"
                read -p "Lựa chọn (1-2): " deploy_choice
                
                if [ "$deploy_choice" == "2" ]; then
@@ -125,33 +125,33 @@ show_cli_menu() {
                fi
                ;;
             4) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần phục hồi Rollback")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain cần khôi phục (Rollback)")
                [ $? -ne 0 ] && continue
                execute_action "rollback" "$DOMAIN_PROMPT" 
                ;;
             5) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền CẦN XÓA HOÀN TOÀN")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain CẦN XÓA")
                [ $? -ne 0 ] && continue
                execute_action "remove-site" "$DOMAIN_PROMPT" 
                ;;
             6) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần xem thông tin")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain xem thông tin")
                [ $? -ne 0 ] && continue
                execute_action "info" "$DOMAIN_PROMPT" 
                ;;
             7) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Đổi PHP Version")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain đổi phiên bản PHP")
                [ $? -ne 0 ] && continue
                execute_action "change-php" "$DOMAIN_PROMPT" 
                ;;
             8) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền quản lý Database")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain quản lý Database")
                [ $? -ne 0 ] && continue
                execute_action "manage-db" "$DOMAIN_PROMPT" 
                [ $? -eq 2 ] && continue
                ;;
             9) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền cần Xem Logs")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain xem logs")
                [ $? -ne 0 ] && continue
                execute_action "logs" "$DOMAIN_PROMPT" 
                ;;
@@ -164,19 +164,19 @@ show_cli_menu() {
             12) execute_action "monitor" ;;
             13)
                # Rename Domain: chọn domain cũ từ menu, rồi nhập domain mới
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền CŨ cần đổi")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain CŨ cần đổi")
                [ $? -ne 0 ] && continue
-               read -p "Nhập Tên miền MỚI muốn đổi sang (vd: newsite.com): " NEW_DOMAIN_PROMPT
+               read -p "Nhập domain MỚI: " NEW_DOMAIN_PROMPT
                NEW_DOMAIN_PROMPT=$(sanitize_input "$NEW_DOMAIN_PROMPT")
                execute_action "rename-domain" "$DOMAIN_PROMPT" "$NEW_DOMAIN_PROMPT"
                ;;
             14)
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền chính muốn thêm Alias")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain chính thêm Alias")
                [ $? -ne 0 ] && continue
                execute_action "add-alias" "$DOMAIN_PROMPT" ""
                ;;
             15)
-               DOMAIN_PROMPT=$(select_site_menu "Chọn Tên miền chính muốn xóa Alias")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain chính xóa Alias")
                [ $? -ne 0 ] && continue
                execute_action "remove-alias" "$DOMAIN_PROMPT" ""
                ;;
@@ -199,7 +199,7 @@ execute_action() {
         # Không cho phép path traversal (/../), max 253 ký tự
         local domain_regex='^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
         if [[ ! "$domain_arg" =~ $domain_regex ]] || [ ${#domain_arg} -gt 253 ]; then
-            error "Tên miền '$domain_arg' bị sai định dạng chuẩn! Vui lòng nhập đúng (VD: example.com, sub.demo.vn)"
+            error "Lỗi: Định dạng domain '$domain_arg' không hợp lệ."
             return 1
         fi
     fi

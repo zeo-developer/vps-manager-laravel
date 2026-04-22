@@ -4,14 +4,14 @@
 
 run_add_site() {
     local domain="$1"
-    info "Đang khởi tạo Hệ sinh thái riêng cho Tên miền Dự Án: ${domain} ..."
+    info "Khởi tạo môi trường cho domain: ${domain}..."
 
     # 1. Tạo file cấu hình riêng .env.$domain
     mkdir -p "$SCRIPT_DIR/sites"
     local SITE_ENV="$SCRIPT_DIR/sites/.env.${domain}"
     
     if [ -f "$SITE_ENV" ]; then
-        error "Site $domain đã tồn tại file cấu hình .env. Quá trình Add-site bị huỷ để bảo vệ code cũ."
+        error "Lỗi: Cấu hình site '$domain' đã tồn tại. Hủy thao tác."
     fi
 
     cp "$SCRIPT_DIR/.env.site.example" "$SITE_ENV"
@@ -33,11 +33,11 @@ run_add_site() {
         *) PHP_VER_SELECTED="8.3" ;;
     esac
     sed -i "s/^PHP_VERSION=.*/PHP_VERSION=\"${PHP_VER_SELECTED}\"/" "$SITE_ENV"
-    info "Đã chọn PHP ${PHP_VER_SELECTED} cho ${domain}."
+    info "PHP Version: ${PHP_VER_SELECTED}"
 
     # Tự động cài đặt PHP PHP_VER_SELECTED nếu hệ thống chưa có
     if [ ! -d "/etc/php/${PHP_VER_SELECTED}/fpm" ]; then
-        info "⚠️ Phát hiện PHP ${PHP_VER_SELECTED} chưa được cài đặt. Đang tiến hành cài đặt dặm..."
+        info "PHP ${PHP_VER_SELECTED} chưa được cài đặt. Bắt đầu cài đặt..."
         apt-get update -y
         local php_pkgs=(
             "php${PHP_VER_SELECTED}-cli" "php${PHP_VER_SELECTED}-fpm" "php${PHP_VER_SELECTED}-mysql"
@@ -48,7 +48,7 @@ run_add_site() {
         apt-get install -y "${php_pkgs[@]}"
         systemctl enable "php${PHP_VER_SELECTED}-fpm"
         systemctl start "php${PHP_VER_SELECTED}-fpm"
-        info "✅ Đã cài đặt xong PHP ${PHP_VER_SELECTED}."
+        info "Hoàn tất cài đặt PHP ${PHP_VER_SELECTED}."
     fi
 
 
@@ -97,7 +97,7 @@ run_add_site() {
     chmod 700 "$ssh_key_dir"
     
     if [ ! -f "$ssh_key_path" ]; then
-        info "Đang khởi tạo mã SSH Key riêng biệt cho [ $domain ]..."
+        info "Khởi tạo SSH Key cho domain: ${domain}..."
         ssh-keygen -t ed25519 -f "$ssh_key_path" -N "" -q -C "deploy_${domain}"
     fi
 
@@ -132,7 +132,7 @@ run_add_site() {
         echo 'DOMAIN_ALIASES=""' >> "$SITE_ENV"
     fi
 
-    info "File cấu hình môi trường đã được tạo tại: sites/.env.${domain}"
+    info "Đã tạo file cấu hình: sites/.env.${domain}"
 
     # 2. Xây dứng cấu trúc thư mục Server /var/www/
     local target_dir="/var/www/$domain"
@@ -142,7 +142,7 @@ run_add_site() {
     mkdir -p "$target_dir/current/public"
     
     # Khởi tạo cấu trúc đầy đủ bằng lệnh tường minh (Tránh lỗi Brace Expansion)
-    info "Khởi tạo cấu trúc Shared Storage (Logs, Cache, Sessions)..."
+    info "Khởi tạo cấu trúc Shared Storage..."
     mkdir -p "$target_dir/shared/storage/logs"
     mkdir -p "$target_dir/shared/storage/app/public"
     mkdir -p "$target_dir/shared/storage/framework/cache"
@@ -155,7 +155,7 @@ run_add_site() {
     chmod 755 "$target_dir"
 
     # 3. Tạo Database cho Web
-    info "Khởi tạo MySQL Database [ ${raw_db_name} ] Cấp quyền độc quyền..."
+    info "Khởi tạo MySQL Database: [ ${raw_db_name} ]..."
     export DEBIAN_FRONTEND="noninteractive"
     run_mysql_secure "CREATE DATABASE IF NOT EXISTS \`${raw_db_name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
     run_mysql_secure "CREATE USER IF NOT EXISTS '${raw_db_name}'@'localhost' IDENTIFIED BY '${raw_db_pass}';"
@@ -163,7 +163,7 @@ run_add_site() {
     run_mysql_secure "FLUSH PRIVILEGES;"
 
     # 4. Triển khai Nginx HTTP (Chưa cài SSL)
-    info "Đăng ký Nginx WebServer (Cấu hình HTTP)..."
+    info "Cấu hình Nginx (HTTP)..."
     local nginx_conf="/etc/nginx/sites-available/$domain"
     
     # Đọc template ghi đè biến
@@ -180,7 +180,7 @@ run_add_site() {
     systemctl reload nginx
 
     # 5. Cài cắm Supervisor Group (Chờ Deploy để kích hoạt)
-    info "Đã gắn cấu hình Supervisor Group [ ${SAFE_DOMAIN} ] cho ${domain}..."
+    info "Cấu hình Supervisor Group: [ ${SAFE_DOMAIN} ]"
     local supervisor_conf="/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
     
     # Định nghĩa danh sách chương trình trong group
@@ -241,25 +241,18 @@ EOF
     # Bước nạp Crontab sẽ được chuyển sang giai đoạn Deploy để đảm bảo đường dẫn tồn tại
 
     info "================================================================="
-    info "🚀 THÀNH CÔNG: DỰ ÁN [ $domain ] ĐÃ SETUP HOÀN TẤT TRÊN SERVER."
-    info "👉 Cấu trúc Web Dir  : $target_dir"
-    info "👉 Database Name/User: $raw_db_name"
-    info "👉 Database Pass     : $raw_db_pass"
-    if [ "$use_ssr" = "true" ]; then
-        info "👉 SSR Port          : $ssr_port"
-    fi
-    if [ "$use_reverb" = "true" ]; then
-        info "👉 Reverb Port       : $reverb_port"
-    fi
-    info ""
-    info "🔑 SSH PUBLIC KEY (Copy cái này add vào Deploy Keys của GitHub):"
-    echo -e "${YELLOW}"
-    cat "${ssh_key_path}.pub"
-    echo -e "${NC}"
-    info ""
-    info "Lưu ý cài đặt Private/Public Key Git rồi chạy lệnh:"
-    info "   ./vps.sh deploy $domain"
-    info ""
-    info "Khi đã trỏ IP Domain thành công, hãy cài SSL tại Menu Số 2."
+    info " THÀNH CÔNG: Site [ $domain ] đã được khởi tạo."
+    info "-----------------------------------------------------------------"
+    info " Web Root     : $target_dir"
+    info " DB Name/User : $raw_db_name"
+    info " DB Password  : $raw_db_pass"
+    [ "$use_ssr" = "true" ] && info " SSR Port     : $ssr_port"
+    [ "$use_reverb" = "true" ] && info " Reverb Port  : $reverb_port"
+    info "-----------------------------------------------------------------"
+    info " SSH Public Key (Thêm vào Deploy Keys trên GitHub):"
+    echo -e "${YELLOW}$(cat "${ssh_key_path}.pub")${NC}"
+    info "-----------------------------------------------------------------"
+    info " Thực hiện deploy: ./vps.sh deploy $domain"
+    info " Cấu hình SSL   : ./vps.sh ssl $domain"
     info "================================================================="
 }

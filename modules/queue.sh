@@ -5,20 +5,20 @@
 run_add_queue() {
     local domain="$1"
     
-    info "Cấu hình thêm bộ Queue Worker đệm riêng cho website: $domain"
+    info "Cấu hình Custom Queue Worker cho domain: $domain..."
     
     # Validation cơ bản
     if [ ! -d "/var/www/$domain/current" ]; then
-        error "Không tìm thấy đường dẫn hệ thống của Website này. Hãy chắc chắn bạn đã Deploy ít nhất 1 lần."
+        error "Lỗi: Không tìm thấy thư mục 'current'. Vui lòng thực hiện Deploy trước."
     fi
     
     read -p "Nhập Tên Queue Channel (vd: mailer, ai_process, high_priority...): " queue_name
     
-    if [ -z "$queue_name" ]; then error "Tên Queue không hợp lệ, thao tác bị huỷ!"; fi
+    if [ -z "$queue_name" ]; then error "Lỗi: Tên Queue không được để trống."; fi
     
     read -p "Nhập số lượng Luồng Worker song song muốn kích hoạt (vd: 1, 2, 4): " num_procs
     
-    if [[ ! $num_procs =~ ^[0-9]+$ ]]; then error "Số luồng phải là chữ số."; fi
+    if [[ ! $num_procs =~ ^[0-9]+$ ]]; then error "Lỗi: Số lượng luồng worker phải là chữ số."; fi
 
     # Chuẩn hóa tên
     local SAFE_DOMAIN=$(get_safe_domain "$domain")
@@ -26,12 +26,12 @@ run_add_queue() {
     local app_user=${APP_USER:-"www-data"}
 
     if [ ! -f "$supervisor_conf" ]; then
-        error "Không tìm thấy cấu hình Supervisor cho site này. Hãy chạy 'vps add-site' trước."
+        error "Lỗi: Không tìm thấy cấu hình Supervisor cho site này."
     fi
 
     local new_program="${SAFE_DOMAIN}-q-${queue_name}"
 
-    info "Đang thêm Luồng Queue [ ${queue_name} ] vào Group [ ${SAFE_DOMAIN} ]..."
+    info "Thêm Queue '${queue_name}' vào group '${SAFE_DOMAIN}'..."
     
     # 1. Thêm chương trình mới vào cuối file
     cat <<EOF >> "$supervisor_conf"
@@ -60,8 +60,10 @@ EOF
     supervisorctl start "${SAFE_DOMAIN}:${new_program}:*"
 
     info "================================================================="
-    info "🔥🔥 ĐÃ TẠO LUỒNG MULTI-WORKER [ $queue_name ] THÀNH CÔNG CHO [ $domain ]."
-    info "Chương trình: ${new_program}"
-    info "Đang chạy với $num_procs Threads ngầm song song."
+    info " THÀNH CÔNG: Danh sách Queue Worker đã được cập nhật."
+    info "-----------------------------------------------------------------"
+    info " Queue Name : $queue_name"
+    info " Threads    : $num_procs"
+    info " Program    : ${new_program}"
     info "================================================================="
 }

@@ -9,14 +9,14 @@ run_deploy() {
     # Kiểm tra Website có tồn tại thật hay không (Dựa trên file env của site)
     local SITE_ENV_FILE="$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
     if [ ! -f "$SITE_ENV_FILE" ]; then
-        error "❌ Lỗi: Website [ ${APP_DOMAIN} ] chưa được khởi tạo. Vui lòng sử dụng lệnh 'vps add-site' trước!"
+        error "Lỗi: Site '${APP_DOMAIN}' chưa được khởi tạo. Vui lòng chạy: vps add-site"
         return 1
     fi
 
     if [ "$DEPLOY_MODE" == "quick" ]; then
-        info "🚀 Bắt đầu quy trình Quick Deploy (Domain: $APP_DOMAIN)..."
+        info "Bắt đầu Quick Deploy: $APP_DOMAIN..."
     else
-        info "🔄 Bắt đầu quy trình Deploy Zero-Downtime (Domain: $APP_DOMAIN)..."
+        info "Bắt đầu Zero-Downtime Deploy: $APP_DOMAIN..."
     fi
 
     # Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
@@ -34,7 +34,7 @@ run_deploy() {
 
     # Kiểm tra và Hỏi Git Repo nếu chưa có
     if [ -z "$GIT_REPO" ] || [ "$GIT_REPO" = "git_repo_url" ]; then
-        info "⚠️ Cần cấu hình Git Repository cho website [ ${APP_DOMAIN} ]."
+        info "Yêu cầu: Cấu hình Git Repository cho site '${APP_DOMAIN}'."
         while true; do
             read -p "Nhập Git Repo URL (vd: git@github.com:user/repo.git): " input_repo
             
@@ -49,11 +49,11 @@ run_deploy() {
                 path="${path%.git}"
                 
                 local ssh_url="git@${provider}:${path}.git"
-                warn "⚠️ Bạn đang sử dụng URL HTTPS. SSH Key sẽ KHÔNG có tác dụng với HTTPS."
-                read -p "Bạn có muốn tự động chuyển sang SSH URL: [ ${ssh_url} ]? (y/n): " convert_choice
+                warn "Cảnh báo: URL HTTPS không sử dụng được với SSH Key."
+                read -p "Tự động chuyển đổi sang SSH URL: [ ${ssh_url} ]? (y/n): " convert_choice
                 if [[ "$convert_choice" =~ ^[Yy]$ ]]; then
                     input_repo="$ssh_url"
-                    info "✅ Đã chuyển đổi sang giao thức SSH."
+                    info "Đã chuyển đổi sang giao thức SSH."
                 fi
             fi
 
@@ -66,14 +66,14 @@ run_deploy() {
                 else
                     echo "GIT_REPO=\"${GIT_REPO}\"" >> "$site_env_file"
                 fi
-                info "✅ Đã lưu Git Repo: ${GIT_REPO}"
+                info "Đã lưu Git Repo: ${GIT_REPO}"
                 break
             elif [[ "$input_repo" =~ ^https:// ]]; then
-                warn "⚠️ Cảnh báo: Sử dụng HTTPS có thể yêu cầu mật khẩu thủ công."
+                warn "Lưu ý: HTTPS yêu cầu xác thực thủ công khi clone/pull."
                 GIT_REPO="$input_repo"
                 break
             else
-                warn "❌ Định dạng URL không hợp lệ! Nên sử dụng dạng 'git@...' để chạy mượt nhất."
+                error "Lỗi: Định dạng URL không hợp lệ. Đề xuất sử dụng giao thức SSH (git@...)"
             fi
         done
     fi
@@ -92,12 +92,12 @@ run_deploy() {
     if [ "$DEPLOY_MODE" == "quick" ]; then
         # CHẾ ĐỘ QUICK DEPLOY
         if [ ! -L "$CURRENT_DIR" ]; then
-            error "❌ Lỗi: Site chưa bao giờ được triển khai ZDT thành công (thiếu liên kết 'current')."
-            error "Vui lòng chạy Deploy chế độ bình thường (ZDT) ít nhất một lần để khởi tạo cấu trúc."
+            error "Lỗi: Site chưa từng được triển khai Zero-Downtime thành công."
+            error "Vui lòng thực hiện Deploy (chế độ ZDT) ít nhất một lần để khởi tạo."
             return 1
         fi
 
-        info "Đang kéo code mới nhất bằng git pull tại thư mục current..."
+        info "Đang cập nhật mã nguồn (git pull)..."
         cd "$CURRENT_DIR" || { error "Không thể truy cập thư mục current"; return 1; }
         
         # Pull code
@@ -105,14 +105,13 @@ run_deploy() {
             git pull origin main || { error "Lỗi khi chạy git pull"; return 1; }
 
         # Cài đặt Composer (nhanh)
-        if [ -f "composer.json" ]; then
-            info "Cập nhật Composer packages..."
+            info "Cài đặt Composer dependencies..."
             sudo -u "$APP_USER" php${PHP_VERSION} /usr/local/bin/composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev || { error "Lỗi khi chạy composer install"; return 1; }
         fi
 
         # Laravel commands
         if [ -f "artisan" ]; then
-            info "Chạy Migrations và Clear Cache..."
+            info "Thực thi Migrations & Clear Cache..."
             sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { error "Lỗi khi chạy migration"; return 1; }
             sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { error "Lỗi khi clear optimize"; return 1; }
         fi
@@ -121,7 +120,7 @@ run_deploy() {
         systemctl reload "php${PHP_VERSION}-fpm"
 
         info "================================================================="
-        info "✅ QUICK DEPLOY THÀNH CÔNG!"
+        info " THÀNH CÔNG: Quick Deploy hoàn tất."
         info "================================================================="
     else
         # CHẾ ĐỘ ZERO-DOWNTIME DEPLOYMENT (Giữ nguyên logic cũ)
@@ -132,18 +131,18 @@ run_deploy() {
         cleanup_failed_release() {
             if [ -d "$NEW_RELEASE" ]; then
                 cd "$RELEASES_DIR" || cd /tmp
-                warn "Phát hiện lỗi trong quá trình build. Đang dọn dẹp release dở dang: $TIMESTAMP"
+                warn "Lỗi tiến trình build. Đang dọn dẹp release: $TIMESTAMP"
                 rm -rf "$NEW_RELEASE"
             fi
         }
 
         # Clone
-        info "Sử dụng SSH Key riêng biệt: $SSH_KEY_PATH"
+        info "Sử dụng SSH Key: $SSH_KEY_PATH"
         sudo -u "$APP_USER" GIT_SSH_COMMAND="ssh -i ${SSH_KEY_PATH} -o StrictHostKeyChecking=no" \
             git clone "$GIT_REPO" "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi: Không thể clone mã nguồn từ Git!"; return 1; }
 
         # 2. Xử lý Shared Storage và Env
-        info "Liên kết file .env và thư mục /storage/ ..."
+        info "Liên kết file .env và thư mục storage..."
         if [ ! -f "${SHARED_DIR}/.env" ]; then
             info "Khởi tạo file .env đầu tiên cho Laravel..."
             if [ -f "${NEW_RELEASE}/.env.example" ]; then
@@ -182,7 +181,7 @@ run_deploy() {
 
         # 3. Build Dependencies (NPM)
         if [ -f "package.json" ]; then
-            info "Cài đặt và Build NPM Packages..."
+            info "Cài đặt & Build NPM packages..."
             sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
             sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
         fi
@@ -225,8 +224,8 @@ run_deploy() {
         supervisorctl reread
         supervisorctl update
         sleep 1
-        info "Đang khởi động/restart các dịch vụ Supervisor thuộc nhóm [ ${SAFE_DOMAIN} ]..."
-        supervisorctl restart "${SAFE_DOMAIN}:*" || supervisorctl start "${SAFE_DOMAIN}:*" || warn "⚠️ Không thể khởi động nhóm dịch vụ Supervisor"
+        info "Khởi chạy các dịch vụ Supervisor: group [ ${SAFE_DOMAIN} ]..."
+        supervisorctl restart "${SAFE_DOMAIN}:*" || supervisorctl start "${SAFE_DOMAIN}:*" || warn "Cảnh báo: Không thể khởi động nhóm dịch vụ Supervisor"
 
         # Cronjob
         local CRON_CMD="* * * * * cd ${CURRENT_DIR} && php${PHP_VERSION} artisan schedule:run >> /dev/null 2>&1"
@@ -235,13 +234,13 @@ run_deploy() {
         fi
 
         # 6. Dọn dẹp
-        info "Dọn dẹp Releases cũ (Giữ lại 3 bản)..."
+        info "Dọn dẹp các bản release cũ..."
         cd "$RELEASES_DIR"
         ls -1t | tail -n +4 | xargs -r rm -rf
 
         info "================================================================="
-        info "TRIỂN KHAI ZDT THÀNH CÔNG!"
-        info "RELEASE MỚI: $TIMESTAMP"
+        info " THÀNH CÔNG: Triển khai Zero-Downtime hoàn tất."
+        info " Release: $TIMESTAMP"
         info "================================================================="
     fi
 
@@ -258,15 +257,15 @@ run_rollback() {
 
     # Kiểm tra Website có tồn tại thật hay không
     if [ ! -d "$BASE_DIR" ] || [ ! -f "$SITE_ENV_FILE" ]; then
-        error "❌ Lỗi: Website [ ${APP_DOMAIN} ] không tồn tại hoặc chưa được cấu hình!"
+        error "Lỗi: Site '${APP_DOMAIN}' không tồn tại hoặc chưa cấu hình."
         return 1
     fi
 
-    info "Bắt đầu thủ tục Rollback cho [ ${APP_DOMAIN} ]..."
+    info "Khởi động thủ tục Rollback cho domain: ${APP_DOMAIN}..."
 
     # Kiểm tra thư mục releases
     if [ ! -d "$RELEASES_DIR" ]; then
-        error "❌ Lỗi: Thư mục releases không tồn tại. Chưa có bản deploy nào để rollback!"
+        error "Lỗi: Thư mục 'releases' không tồn tại. Không tìm thấy bản triển khai cũ."
         return 1
     fi
 
@@ -277,7 +276,7 @@ run_rollback() {
     local PREV_RELEASE_NAME=$(ls -1t | sed -n '2p')
     
     if [ -z "$PREV_RELEASE_NAME" ]; then
-        error "❌ Lỗi: Không có bản release lưu trữ trước đó để rollback!"
+        error "Lỗi: Không tìm thấy bản release cũ để khôi phục."
         return 1
     fi
     
@@ -287,17 +286,15 @@ run_rollback() {
     # Kiểm tra & Hỏi xác nhận Rollback Database Thủ công
     echo ""
     warn "=========================================================================="
-    warn "⚠️  CẢNH BÁO QUAN TRỌNG VỀ DATABASE (DỮ LIỆU)  ⚠️"
+    warn "                CẢNH BÁO QUAN TRỌNG VỀ DATABASE                           "
     warn "=========================================================================="
-    warn "Việc Rollback sẽ lùi cấu trúc Database về trạng thái cũ."
-    warn "🔴 Hậu quả: Dữ liệu ở các cột/bảng mới vừa được tạo sẽ bị XÓA SẠCH VĨNH VIỄN!"
-    warn "🔴 Lời khuyên: CHỈ chọn 'y' nếu anh chắc chắn code cũ không thể chạy được"
-    warn "               với cấu trúc database hiện tại; hoặc database không có"
-    warn "               thay đổi gì ở phiên bản vừa release (Tool sẽ tự bảo vệ)."
+    warn "Việc Rollback Migrations sẽ làm thay đổi cấu trúc dữ liệu."
+    warn " - Dữ liệu tại các cột/bảng mới vừa tạo sẽ bị xóa vĩnh viễn."
+    warn " - Chỉ thực hiện nếu thực sự cần thiết cho code cũ hoạt động."
     warn "=========================================================================="
     
     # Mặc định là Không (y/N)
-    read -p "Anh có muốn khôi phục cấu trúc Database (Rollback Migrations) không? (y/N): " confirm_db
+    read -p "Xác nhận khôi phục cấu trúc Database (Rollback Migrations)? (y/N): " confirm_db
     
     if [[ "$confirm_db" =~ ^[Yy]$ ]]; then
         if [ -f "${CURRENT_FAILED_RELEASE}/artisan" ]; then
@@ -307,18 +304,18 @@ run_rollback() {
             warn "⚠️ Không tìm thấy file artisan trong bản lỗi để thực hiện Rollback DB."
         fi
     else
-        info "🛡️ Đã bỏ qua bước Rollback Database theo yêu cầu. 🏆"
+        info "Đã bỏ qua quy trình Rollback Database."
     fi
 
     # Tiếp tục rollback phần Code (Symlink)
-    info "Đang khôi phục symlink current về phiên bản ổn định: $PREV_RELEASE_NAME..."
-    sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR" || { error "Không thể hoán đổi symlink"; return 1; }
+    info "Khôi phục symlink current về phiên bản: $PREV_RELEASE_NAME..."
+    sudo -u "$APP_USER" ln -nfs "$TARGET_ROLLBACK" "$CURRENT_DIR" || { error "Lỗi: Không thể hoán đổi symlink"; return 1; }
 
     # Xóa bỏ hoàn toàn bản release lỗi để dọn dẹp hệ thống
     if [ -d "$CURRENT_FAILED_RELEASE" ]; then
-        info "Đang xóa bỏ bản release lỗi vừa rồi để dọn dẹp hệ thống..."
+        info "Xóa bản release bị lỗi để giải phóng dung lượng..."
         rm -rf "$CURRENT_FAILED_RELEASE"
-        info "✅ Đã xóa sạch bản lỗi. (Log vẫn còn trong shared/storage/logs/)."
+        info "Hoàn tất xóa bản lỗi."
     fi
     
     # Xoá views cache để load source cũ an toàn
@@ -329,10 +326,10 @@ run_rollback() {
     # Restart pool php và supervisor
     systemctl reload "php${PHP_VERSION}-fpm"
     local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
-    info "Đang Rollback các dịch vụ Supervisor thuộc nhóm [ ${SAFE_DOMAIN} ]..."
+    info "Khởi động lại các dịch vụ Supervisor: group [ ${SAFE_DOMAIN} ]..."
     supervisorctl restart "${SAFE_DOMAIN}:*" || true
     
     info "================================================================="
-    info "ĐÃ ROLLBACK (Khôi phục) THÀNH CÔNG VỀ BẢN: $PREV_RELEASE_NAME !"
+    info " THÀNH CÔNG: Đã khôi phục về bản release: $PREV_RELEASE_NAME"
     info "================================================================="
 }

@@ -6,8 +6,9 @@ run_ssl_manager() {
     local domain="$1"
     
     echo -e "${CYAN}==========================================${NC}"
-    echo -e "${CYAN}    QUẢN LÝ SSL CHO: ${domain}           ${NC}"
+    echo -e "${CYAN}        SSL CERTIFICATE MANAGER           ${NC}"
     echo -e "${CYAN}==========================================${NC}"
+    echo -e " ${BLUE}Domain:${NC} ${domain}"
     echo -e " ${GREEN}1.${NC} Cài đặt SSL Mới (Let's Encrypt)"
     echo -e " ${GREEN}2.${NC} Ép gia hạn nạp lại toàn bộ SSL (Renew All)"
     echo -e " ${RED}0.${NC} Quay lại Menu chính"
@@ -24,12 +25,12 @@ run_ssl_manager() {
 
 install_ssl() {
     local domain="$1"
-    info "Bắt đầu quy trình cài đặt SSL Let's Encrypt cho ${domain}..."
-    warn "Đảm bảo bạn đã trỏ IP Domain về Server thành công trước khi cài."
+    info "Cài đặt SSL Let's Encrypt: ${domain}..."
+    warn "Yêu cầu: Đảm bảo DNS domain đã được trỏ về IP máy chủ."
 
     # Kiểm tra xem domain đã được cấu hình nginx chưa
     if [ ! -f "/etc/nginx/sites-available/$domain" ]; then
-        error "Không tìm thấy file cấu hình Nginx cho ${domain}. Hãy Add Site trước."
+        error "Lỗi: Không tìm thấy file cấu hình Nginx (Vui lòng chạy add-site)."
         return 1
     fi
 
@@ -37,8 +38,8 @@ install_ssl() {
     local d_flags="-d ${domain}"
     local aliases="${DOMAIN_ALIASES:-}"
     if [ -n "$aliases" ]; then
-        info "Phát hiện alias: ${aliases}"
-        info "Đang cài SSL SAN cert cover cả domain chính và alias..."
+        info "Phát hiện Alias: ${aliases}"
+        info "Khởi tạo SSL SAN (Primary + Aliases)..."
         for alias in $aliases; do
             d_flags="${d_flags} -d ${alias}"
         done
@@ -48,7 +49,7 @@ install_ssl() {
     local expand_flag=""
     if [ -d "/etc/letsencrypt/live/${domain}" ]; then
         expand_flag="--expand"
-        info "Cert đã tồn tại — dùng --expand để mở rộng thêm domain mới vào cert..."
+        info "Mở rộng SSL certificate (--expand)..."
     fi
 
     # ―― Chạy certbot ――――――――――――――――――――――――――――――――――――――――
@@ -56,18 +57,16 @@ install_ssl() {
     if certbot --nginx $d_flags $expand_flag \
             --non-interactive --agree-tos --register-unsafely-without-email; then
         info "================================================================="
-        info "✅ THÀNH CÔNG: SSL ĐÃ ĐƯỢC CÀI/CẬP NHẬT CHO [ ${domain} ]"
-        if [ -n "$aliases" ]; then
-            info "   Cert cover thêm: ${aliases}"
-        fi
+        info " THÀNH CÔNG: Đã cài đặt SSL cho [ ${domain} ]"
+        [ -n "$aliases" ] && info " Danh sách SAN: ${aliases}"
         info "================================================================="
     else
-        warn "Cài đặt SSL thất bại. Vui lòng kiểm tra lại DNS hoặc Logs của Certbot."
+        error "Lỗi: Cài đặt SSL thất bại (Kiểm tra DNS hoặc Certbot logs)."
     fi
 }
 
 renew_ssl_all() {
-    info "Đang tiến hành kiểm tra và gia hạn thủ công toàn bộ Chứng chỉ SSL..."
+    info "Đang gia hạn toàn bộ SSL certificate..."
     if certbot renew; then
         info "Quá trình kiểm tra/gia hạn hoàn tất."
         systemctl reload nginx

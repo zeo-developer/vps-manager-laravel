@@ -11,7 +11,7 @@ run_rename_domain() {
 
     # ── 1. Validate ──────────────────────────────────────────────────────────
     if [ ! -f "$OLD_ENV" ]; then
-        error "Site '$old_domain' không tồn tại trong hệ thống."
+        error "Lỗi: Site '$old_domain' không tồn tại."
         return 1
     fi
     if [ -f "$NEW_ENV" ]; then
@@ -34,8 +34,8 @@ run_rename_domain() {
         local conflict_domain
         conflict_domain=$(basename "$conflict_file" | sed 's/^\.env\.//')
         
-        error "Domain '${new_domain}' đang được sử dụng làm Bí danh (Alias) cho Website: ${conflict_domain}"
-        error "Vui lòng vào mục Quản lý Alias của web [${conflict_domain}] gỡ bí danh này ra trước."
+        error "Lỗi: Domain '${new_domain}' đang là Alias của site '${conflict_domain}'."
+        error "Yêu cầu gỡ Alias tại site '${conflict_domain}' trước khi đổi tên."
         return 1
     fi
 
@@ -49,24 +49,24 @@ run_rename_domain() {
     local app_user="${APP_USER:-www-data}"
 
     echo -e "${CYAN}==========================================${NC}"
-    echo -e "${CYAN}     ĐỔI TÊN MIỀN WEBSITE                ${NC}"
+    echo -e "${CYAN}         DOMAIN RENAME MANAGER            ${NC}"
     echo -e "${CYAN}==========================================${NC}"
     echo -e " ${BLUE}Domain cũ    :${NC} ${old_domain}"
     echo -e " ${BLUE}Domain mới   :${NC} ${new_domain}"
     echo -e " ${BLUE}Database     :${NC} ${DB_NAME} (giữ nguyên)"
     echo -e "------------------------------------------"
-    warn "Sau khi đổi, anh CẦN:"
-    warn "  1. Trỏ DNS ${new_domain} về IP server này"
-    warn "  2. Chạy: ./vps.sh ssl ${new_domain} để cài SSL mới"
+    warn "Yêu cầu sau khi thay đổi:"
+    warn "  1. Cấu hình DNS của domain mới về IP máy chủ"
+    warn "  2. Khởi tạo SSL: ./vps.sh ssl ${new_domain}"
     echo -e "------------------------------------------"
     read -p "Gõ 'YES' để xác nhận đổi domain: " confirm
     if [ "$confirm" != "YES" ]; then
-        info "Đã hủy thao tác đổi domain."
+        info "Hủy thao tác đổi domain."
         return 0
     fi
 
     # ── 2. Tạo file env mới ──────────────────────────────────────────────────
-    info "Tạo file cấu hình mới sites/.env.${new_domain} ..."
+    info "Khởi tạo cấu hình: sites/.env.${new_domain}..."
     cp "$OLD_ENV" "$NEW_ENV"
     sed -i "s|^APP_DOMAIN=.*|APP_DOMAIN=\"${new_domain}\"|" "$NEW_ENV"
     # Cập nhật đường dẫn SSH key trỏ đến key mới
@@ -77,14 +77,14 @@ run_rename_domain() {
     local old_key="/var/www/.vps_keys/id_ed25519_${old_domain}"
     local new_key="/var/www/.vps_keys/id_ed25519_${new_domain}"
     if [ -f "$old_key" ]; then
-        info "Đổi tên SSH Key: id_ed25519_${old_domain} → id_ed25519_${new_domain}"
+        info "Cập nhật SSH Key..."
         mv "$old_key"     "$new_key"
         mv "${old_key}.pub" "${new_key}.pub" 2>/dev/null || true
     fi
 
     # ── 4. mv Web Root + Fix Symlinks ────────────────────────────────────────
     if [ -d "/var/www/${old_domain}" ]; then
-        info "Di chuyển Web Root: /var/www/${old_domain} → /var/www/${new_domain} ..."
+        info "Di chuyển Web Root..."
         mv "/var/www/${old_domain}" "/var/www/${new_domain}"
 
         # Fix symlink current → release mới nhất
@@ -92,7 +92,7 @@ run_rename_domain() {
         local latest_release
         latest_release=$(ls -1t "$releases_dir" 2>/dev/null | head -1)
         if [ -n "$latest_release" ]; then
-            info "Rebuild symlink 'current' → releases/${latest_release} ..."
+            info "Cấu hình symlink 'current'..."
             ln -nfs "${releases_dir}/${latest_release}" "/var/www/${new_domain}/current"
 
             # Fix symlinks storage + .env bên trong từng release (đường dẫn tuyệt đối bị hỏng sau mv)
@@ -101,12 +101,12 @@ run_rename_domain() {
                 ln -nfs "/var/www/${new_domain}/shared/storage" "${rel_dir}storage"
                 ln -nfs "/var/www/${new_domain}/shared/.env"    "${rel_dir}.env"
             done
-            info "Đã rebuild symlinks cho tất cả releases."
+            info "Cập nhật symlinks thành công."
         fi
     fi
 
     # ── 5. Nginx Config ──────────────────────────────────────────────────────────────
-    info "Tạo lại cấu hình Nginx cho domain mới ..."
+    info "Cấu hình Nginx..."
     local php_ver="${PHP_VERSION:-8.3}"
     local aliases_str="${DOMAIN_ALIASES:-}"
     # Build SERVER_NAMES sạch: không dư dấu cách
@@ -125,7 +125,7 @@ run_rename_domain() {
     systemctl reload nginx
 
     # ── 6. Supervisor Config ─────────────────────────────────────────────────
-    info "Cập nhật cấu hình Supervisor ..."
+    info "Cấu hình Supervisor..."
     local old_sup="/etc/supervisor/conf.d/${OLD_SAFE}.conf"
     local new_sup="/etc/supervisor/conf.d/${NEW_SAFE}.conf"
     if [ -f "$old_sup" ]; then
@@ -150,20 +150,20 @@ run_rename_domain() {
         if [ -L "/var/www/${new_domain}/current" ]; then
             supervisorctl restart "${NEW_SAFE}:*" 2>/dev/null || true
         else
-            info "Bỏ qua restart Supervisor vì dự án chưa được Deploy mã nguồn."
+            info "Bỏ qua khởi động Supervisor (Chưa deploy mã nguồn)."
         fi
     fi
 
     # ── 7. Cập nhật APP_URL trong shared/.env Laravel ────────────────────────
     local shared_env="/var/www/${new_domain}/shared/.env"
     if [ -f "$shared_env" ]; then
-        info "Cập nhật APP_URL trong Laravel .env ..."
+        info "Cập nhật APP_URL..."
         sed -i "s|^APP_URL=.*|APP_URL=https://${new_domain}|g" "$shared_env"
     fi
 
     # ── 8. Cập nhật Crontab ──────────────────────────────────────────────────
     if sudo -u "$app_user" crontab -l 2>/dev/null | grep -q "cd /var/www/${old_domain}/current"; then
-        info "Cập nhật Crontab scheduler ..."
+        info "Cập nhật Crontab..."
         sudo -u "$app_user" crontab -l \
             | sed "s|cd /var/www/${old_domain}/current|cd /var/www/${new_domain}/current|g" \
             | sudo -u "$app_user" crontab -
@@ -171,23 +171,24 @@ run_rename_domain() {
 
     # ── 9. Xóa SSL Cert cũ ───────────────────────────────────────────────────
     if [ -d "/etc/letsencrypt/live/${old_domain}" ]; then
-        info "Xóa SSL cert cũ của ${old_domain} ..."
+        info "Gỡ bỏ SSL certificate cũ..."
         certbot delete --cert-name "${old_domain}" --non-interactive 2>/dev/null \
             || warn "Không thể xóa cert tự động. Xóa thủ công: certbot delete --cert-name ${old_domain}"
     fi
 
     # ── 10. Xóa env cũ ───────────────────────────────────────────────────────
     rm -f "$OLD_ENV"
-    info "Đã xóa file cấu hình cũ: sites/.env.${old_domain}"
+    info "Xóa cấu hình cũ: .env.${old_domain}"
 
     # ── Hoàn tất ─────────────────────────────────────────────────────────────
     info "================================================================="
-    info "✅ ĐÃ ĐỔI DOMAIN THÀNH CÔNG: ${old_domain} → ${new_domain}"
-    info "   Database : ${DB_NAME} (giữ nguyên, không bị đổi)"
-    info ""
-    warn "VIỆC CẦN LÀM TIẾP THEO:"
-    warn "  1. Trỏ DNS bản ghi A của '${new_domain}' về IP server"
-    warn "  2. Sau khi DNS propagate (5-30 phút), chạy:"
-    warn "     ./vps.sh ssl ${new_domain}"
+    info " THÀNH CÔNG: Thay đổi domain hoàn tất."
+    info "-----------------------------------------------------------------"
+    info " Miền cũ : ${old_domain}"
+    info " Miền mới: ${new_domain}"
+    info "-----------------------------------------------------------------"
+    info " Bước tiếp theo:"
+    info "  1. Kiểm tra DNS domain '${new_domain}'"
+    info "  2. Khởi tạo SSL: ./vps.sh ssl ${new_domain}"
     info "================================================================="
 }

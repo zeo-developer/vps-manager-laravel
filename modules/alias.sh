@@ -30,7 +30,7 @@ rebuild_nginx_with_aliases() {
     systemctl reload nginx
 
     if [ -n "$aliases" ]; then
-        info "Nginx server_name cập nhật: ${server_names}"
+        info "Cập nhật Nginx server_name: ${server_names}"
     else
         info "Nginx server_name cập nhật: ${primary} (không có alias)"
     fi
@@ -47,25 +47,25 @@ run_add_alias() {
 
     # ── Validate ──────────────────────────────────────────────────────────────
     if [ ! -f "$SITE_ENV" ]; then
-        error "Site '${primary}' không tồn tại trong hệ thống."
+        error "Lỗi: Site '${primary}' không tồn tại."
         return 1
     fi
 
     # Alias không được trùng với primary
     if [ "$alias_domain" = "$primary" ]; then
-        error "Domain alias không được trùng với domain chính."
+        error "Lỗi: Alias trùng với domain chính."
         return 1
     fi
 
     # Alias không được là domain chính của site khác
     if [ -f "$SCRIPT_DIR/sites/.env.${alias_domain}" ]; then
-        error "Domain '${alias_domain}' đã là domain chính của một site khác."
+        error "Lỗi: '${alias_domain}' đang là domain chính của site khác."
         return 1
     fi
 
     # Alias không được đã tồn tại trong DOMAIN_ALIASES của bất kỳ site nào
     if grep -rh "^DOMAIN_ALIASES=" "$SCRIPT_DIR/sites/" 2>/dev/null | grep -qw "$alias_domain"; then
-        error "Domain '${alias_domain}' đã được đăng ký làm alias ở một site khác."
+        error "Lỗi: '${alias_domain}' đã được sử dụng làm alias."
         return 1
     fi
 
@@ -76,7 +76,7 @@ run_add_alias() {
 
     # Kiểm tra alias chưa có trong danh sách hiện tại
     if echo "$current_aliases" | grep -qw "$alias_domain"; then
-        warn "Domain '${alias_domain}' đã là alias của site '${primary}' rồi."
+        info "Domain '${alias_domain}' đã tồn tại trong danh sách alias."
         return 0
     fi
 
@@ -100,20 +100,20 @@ run_add_alias() {
 
     # ── Hỏi cài SSL ──────────────────────────────────────────────────────────
     echo -e ""
-    echo -e " ${YELLOW}Lưu ý:${NC} Alias domain cần được trỏ DNS về IP server trước khi cài SSL."
-    read -p "Cài/cập nhật SSL để cover alias '${alias_domain}' ngay bây giờ? (y/n): " ssl_choice
+    warn "Yêu cầu: Cấu hình DNS cho alias trước khi cài SSL."
+    read -p "Cài đặt SSL cho alias '${alias_domain}'? (y/n): " ssl_choice
     if [[ "$ssl_choice" =~ ^[Yy]$ ]]; then
         source "$SCRIPT_DIR/modules/ssl.sh"
         install_ssl "$primary"
     else
-        info "Có thể cài SSL sau bằng Menu số 2 hoặc: ./vps.sh ssl ${primary}"
+        info "Gợi ý: Cài SSL sau bằng lệnh: ./vps.sh ssl ${primary}"
     fi
 
     info "================================================================="
-    info "✅ ĐÃ THÊM ALIAS THÀNH CÔNG"
-    info "   Site chính : ${primary}"
-    info "   Alias mới  : ${alias_domain}"
-    info "   Tất cả alias: ${new_aliases}"
+    info " THÀNH CÔNG: Đã thêm alias cho site [ ${primary} ]"
+    info "-----------------------------------------------------------------"
+    info " Alias mới : ${alias_domain}"
+    info " Danh sách : ${new_aliases}"
     info "================================================================="
 }
 
@@ -127,7 +127,7 @@ run_remove_alias() {
     local SITE_ENV="$SCRIPT_DIR/sites/.env.${primary}"
 
     if [ ! -f "$SITE_ENV" ]; then
-        error "Site '${primary}' không tồn tại trong hệ thống."
+        error "Lỗi: Site '${primary}' không tồn tại."
         return 1
     fi
 
@@ -137,19 +137,19 @@ run_remove_alias() {
     local current_aliases="${DOMAIN_ALIASES:-}"
 
     if [ -z "$current_aliases" ]; then
-        error "Site '${primary}' hiện không có alias nào."
+        error "Lỗi: Site '${primary}' không có alias."
         return 1
     fi
 
     # Kiểm tra alias có trong danh sách không
     if ! echo "$current_aliases" | grep -qw "$alias_domain"; then
-        error "Domain '${alias_domain}' không phải alias của site '${primary}'."
+        error "Lỗi: '${alias_domain}' không thuộc danh sách alias của '${primary}'."
         return 1
     fi
 
-    warn "Bạn đang xóa alias '${alias_domain}' khỏi site '${primary}'."
-    read -p "Xác nhận? (y/n): " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || { info "Đã hủy."; return 0; }
+    warn "Xác nhận xóa alias '${alias_domain}' khỏi site '${primary}'?"
+    read -p "Xác nhận (y/n): " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || { info "Hủy thao tác."; return 0; }
 
     # ── Xóa alias khỏi danh sách ─────────────────────────────────────────────
     local new_aliases
@@ -158,19 +158,20 @@ run_remove_alias() {
     sed -i "s|^DOMAIN_ALIASES=.*|DOMAIN_ALIASES=\"${new_aliases}\"|" "$SITE_ENV"
 
     # ── Rebuild Nginx ─────────────────────────────────────────────────────────
-    info "Đang cập nhật cấu hình Nginx ..."
+    info "Cập nhật cấu hình Nginx..."
     rebuild_nginx_with_aliases "$primary" "$new_aliases"
 
     # ── Thông báo về SSL ─────────────────────────────────────────────────────
     if [ -d "/etc/letsencrypt/live/${primary}" ]; then
-        warn "SSL cert hiện tại vẫn còn cover '${alias_domain}'."
-        warn "Nếu muốn loại khỏi cert, chạy lại: ./vps.sh ssl ${primary}"
+        warn "SSL certificate hiện tại vẫn bao gồm '${alias_domain}'."
+        warn "Để cập nhật certificate, chạy: ./vps.sh ssl ${primary}"
     fi
 
     info "================================================================="
-    info "✅ ĐÃ XÓA ALIAS THÀNH CÔNG"
-    info "   Đã xóa    : ${alias_domain}"
-    info "   Còn lại   : ${new_aliases:-'(không có alias)'}"
+    info " THÀNH CÔNG: Đã xóa alias khỏi site [ ${primary} ]"
+    info "-----------------------------------------------------------------"
+    info " Đã xóa  : ${alias_domain}"
+    info " Còn lại : ${new_aliases:-'(không có)'}"
     info "================================================================="
 }
 
@@ -187,8 +188,9 @@ run_manage_alias() {
     local current_aliases="${DOMAIN_ALIASES:-}"
 
     echo -e "${CYAN}==========================================${NC}"
-    echo -e "${CYAN}   QUẢN LÝ DOMAIN ALIAS: ${primary}     ${NC}"
+    echo -e "${CYAN}        DOMAIN ALIAS MANAGER              ${NC}"
     echo -e "${CYAN}==========================================${NC}"
+    echo -e " ${BLUE}Site chính:${NC} ${primary}"
     if [ -n "$current_aliases" ]; then
         echo -e " ${BLUE}Alias hiện tại:${NC} ${current_aliases}"
     else
