@@ -92,9 +92,10 @@ show_cli_menu() {
         echo -e " ${GREEN}13.${NC} Đổi tên miền Website"
         echo -e " ${GREEN}14.${NC} Thêm Domain Alias"
         echo -e " ${GREEN}15.${NC} Xóa Domain Alias"
+        echo -e " ${YELLOW}16.${NC} Quản lý SWAP Memory"
         echo -e " ${RED}0.${NC} Thoát"
         echo -e "------------------------------------------"
-        read -p "Nhập lựa chọn (0-15): " choice
+        read -p "Nhập lựa chọn (0-16): " choice
 
         DOMAIN_PROMPT=""
         case $choice in
@@ -179,6 +180,9 @@ show_cli_menu() {
                DOMAIN_PROMPT=$(select_site_menu "Chọn domain chính xóa Alias")
                [ $? -ne 0 ] && continue
                execute_action "remove-alias" "$DOMAIN_PROMPT" ""
+               ;;
+            16)
+               execute_action "manage-swap"
                ;;
             0) exit 0 ;;
             *) warn "Lựa chọn không hợp lệ." ;;
@@ -321,6 +325,11 @@ execute_action() {
                 # Interactive mode: mục 2 trong manage_alias
                 run_manage_alias "$domain_arg"
             fi
+            ;;
+        manage-swap)
+            require_root
+            source "$SCRIPT_DIR/modules/swap.sh"
+            run_swap_manager
             ;;
         *)
             error "Lệnh '${cmd}' không tồn tại."
