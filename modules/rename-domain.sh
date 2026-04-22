@@ -85,15 +85,18 @@ run_rename_domain() {
         fi
     fi
 
-    # ── 5. Nginx Config ──────────────────────────────────────────────────────
+    # ── 5. Nginx Config ──────────────────────────────────────────────────────────────
     info "Tạo lại cấu hình Nginx cho domain mới ..."
     local php_ver="${PHP_VERSION:-8.3}"
     local aliases_str="${DOMAIN_ALIASES:-}"
+    # Build SERVER_NAMES sạch: không dư dấu cách
+    local server_names="$new_domain"
+    [ -n "$aliases_str" ] && server_names="$new_domain $aliases_str"
     local nginx_conf="/etc/nginx/sites-available/${new_domain}"
 
     sed "s/{{APP_DOMAIN}}/${new_domain}/g; \
          s/{{PHP_VERSION}}/${php_ver}/g; \
-         s/{{DOMAIN_ALIASES}}/${aliases_str}/g" \
+         s/{{SERVER_NAMES}}/${server_names}/g" \
         "$SCRIPT_DIR/configs/nginx-template.conf" > "$nginx_conf"
 
     ln -nfs "$nginx_conf" "/etc/nginx/sites-enabled/${new_domain}"

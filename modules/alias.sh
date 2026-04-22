@@ -13,20 +13,26 @@ rebuild_nginx_with_aliases() {
     local php_ver
     php_ver=$(grep -oP '(?<=^PHP_VERSION=")[^"]+' "$SITE_ENV" 2>/dev/null || echo "8.3")
 
+    # Build SERVER_NAMES: primary + aliases (nếu có) — không có dấu cách thừa
+    local server_names="$primary"
+    if [ -n "$aliases" ]; then
+        server_names="$primary $aliases"
+    fi
+
     local nginx_conf="/etc/nginx/sites-available/${primary}"
 
     sed "s/{{APP_DOMAIN}}/${primary}/g; \
          s/{{PHP_VERSION}}/${php_ver}/g; \
-         s/{{DOMAIN_ALIASES}}/${aliases}/g" \
+         s/{{SERVER_NAMES}}/${server_names}/g" \
         "$SCRIPT_DIR/configs/nginx-template.conf" > "$nginx_conf"
 
     ln -nfs "$nginx_conf" "/etc/nginx/sites-enabled/${primary}"
     systemctl reload nginx
 
     if [ -n "$aliases" ]; then
-        info "Nginx server_name cập nhật: ${primary} ${aliases}"
+        info "Nginx server_name cập nhật: ${server_names}"
     else
-        info "Nginx server_name cập nhật: ${primary} (không còn alias)"
+        info "Nginx server_name cập nhật: ${primary} (không có alias)"
     fi
 }
 

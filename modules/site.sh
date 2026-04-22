@@ -168,10 +168,12 @@ run_add_site() {
     
     # Đọc template ghi đè biến
     local php_ver=$(grep -oP "(?<=^PHP_VERSION=\")[^\"]+" "$SITE_ENV" || echo "8.3")
+    # Khi tạo mới, chưa có alias — SERVER_NAMES chỉ gồm domain chính
+    local server_names="${domain}"
     cat "$SCRIPT_DIR/configs/nginx-template.conf" \
         | sed "s/{{APP_DOMAIN}}/$domain/g" \
+        | sed "s/{{SERVER_NAMES}}/$server_names/g" \
         | sed "s/{{PHP_VERSION}}/$php_ver/g" \
-        | sed "s/{{DOMAIN_ALIASES}}//g" \
         > "$nginx_conf"
 
     ln -nfs "$nginx_conf" "/etc/nginx/sites-enabled/$domain"
