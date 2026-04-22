@@ -161,6 +161,7 @@ run_deploy() {
         sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USER}/g" "${SHARED_DIR}/.env"
         sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
+        sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
         
         # Link storage & env
         rm -rf "${NEW_RELEASE}/storage"
@@ -197,9 +198,10 @@ run_deploy() {
             sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache || { cleanup_failed_release; error "Lỗi khi cache view"; return 1; }
         fi
 
-        # 4.1 JWT Secret (Check if exists)
+        # 4.1 JWT Secret (Khởi tạo nếu chưa có giá trị)
         if [ "$USE_JWT" = "true" ] && [ -f "artisan" ]; then
-            if ! grep -q "JWT_SECRET=" "${SHARED_DIR}/.env" 2>/dev/null; then
+            # Kiểm tra nếu JWT_SECRET chưa có giá trị (trống hoặc chưa tồn tại dòng đó)
+            if ! grep -q "^JWT_SECRET=.\+" "${SHARED_DIR}/.env" 2>/dev/null; then
                 info "Khởi tạo JWT Secret..."
                 sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
             fi
