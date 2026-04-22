@@ -56,8 +56,8 @@ validate_env_file() {
         error "File '$file' chứa cú pháp không hợp lệ (chỉ cho phép KEY=VALUE hoặc comment)."
         return 1
     fi
-    # Chặn thêm subshell và backtick dù nằm trong value
-    if grep -qE '\$\(|`' "$file" 2>/dev/null; then
+    # Chặn thêm subshell và backtick dù nằm trong value (Bỏ qua các dòng comment)
+    if grep -vE '^\s*#' "$file" | grep -qE '\$\(|`' 2>/dev/null; then
         error "File '$file' chứa lệnh nhúng nguy hiểm (\$() hoặc backtick). Từ chối nạp."
         return 1
     fi
