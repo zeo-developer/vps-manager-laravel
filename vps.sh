@@ -190,8 +190,8 @@ show_cli_menu() {
 
 execute_action() {
     local cmd="$1"
-    local domain_arg="$2"
-    local extra_arg="$3"
+    local domain_arg="${2:-}"
+    local extra_arg="${3:-}"
     
     # Kiểm tra tính hợp lệ của định dạng Tên Miền (Nếu có tham số domain)
     if [ -n "$domain_arg" ]; then
