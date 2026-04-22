@@ -109,8 +109,18 @@ run_rename_domain() {
     local old_sup="/etc/supervisor/conf.d/${OLD_SAFE}.conf"
     local new_sup="/etc/supervisor/conf.d/${NEW_SAFE}.conf"
     if [ -f "$old_sup" ]; then
-        sed "s|${old_domain}|${new_domain}|g; s|${OLD_SAFE}|${NEW_SAFE}|g" \
-            "$old_sup" > "$new_sup"
+        cp "$old_sup" "$new_sup"
+        
+        # SỬ DỤNG PHƯƠNG PHÁP CỤ THỂ HOÁ MỤC TIÊU (EXPLICIT TARGETING)
+        # 1. Chỉ thay thế cho đường dẫn web root (Để tránh đụng chạm linh tinh)
+        sed -i "s|/var/www/${old_domain}/|/var/www/${new_domain}/|g" "$new_sup"
+        
+        # 2. Thay thế vào đúng các thẻ (tags) định danh chuẩn của phần mềm Supervisor
+        sed -i "s|group:${OLD_SAFE}\]|group:${NEW_SAFE}\]|g" "$new_sup"
+        sed -i "s|program:${OLD_SAFE}-|program:${NEW_SAFE}-|g" "$new_sup"
+        sed -i "s|programs=${OLD_SAFE}-|programs=${NEW_SAFE}-|g" "$new_sup"
+        sed -i "s|,${OLD_SAFE}-|,${NEW_SAFE}-|g" "$new_sup"
+
         chmod 644 "$new_sup"
         rm -f "$old_sup"
         supervisorctl reread
