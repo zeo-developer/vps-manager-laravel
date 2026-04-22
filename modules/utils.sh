@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # modules/utils.sh
 # Các hàm tiện ích dùng chung cho Hệ thống VPS Manager
+set -uo pipefail   # Bắt lỗi unbound variable và pipeline fail
 
 # Màu hiển thị log Terminal
 RED='\033[0;31m'
@@ -12,9 +13,9 @@ NC='\033[0m' # No Color
 
 info() { echo -e "${GREEN}[INFO] $1${NC}"; }
 warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
-error() { 
+error() {
     echo -e "${RED}[ERROR] $1${NC}"
-    return 1 2>/dev/null || exit 1 
+    return 1 2>/dev/null || exit 1
 }
 
 
@@ -40,39 +41,60 @@ harden_permissions() {
     fi
 }
 
+# Kiểm tra file .env không chứa lệnh shell nguy hiểm trước khi source
+# Usage: validate_env_file "/path/to/.env" && source "/path/to/.env"
+validate_env_file() {
+    local file="$1"
+    if [ ! -f "$file" ]; then
+        error "File cấu hình không tồn tại: $file"
+        return 1
+    fi
+    # Từ chối nếu có cú pháp shell nguy hiểm ngoài comment và assignment
+    # Cho phép: VAR=value, VAR="value", #comment, dòng trống
+    if grep -qvE '^\s*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*=.*$' "$file" 2>/dev/null; then
+        error "File '$file' chứa cú pháp không hợp lệ (chỉ cho phép KEY=VALUE hoặc comment)."
+        return 1
+    fi
+    # Chặn thêm subshell và backtick dù nằm trong value
+    if grep -qE '\$\(|`' "$file" 2>/dev/null; then
+        error "File '$file' chứa lệnh nhúng nguy hiểm (\$() hoặc backtick). Từ chối nạp."
+        return 1
+    fi
+    return 0
+}
+
 # Wrapper thực thi lệnh MySQL an toàn giấu mật khẩu
 # Usage: run_mysql_secure "QUERY"
 run_mysql_secure() {
     local query="$1"
-    
+
     # Kiểm tra biến môi trường root pass
-    if [ -z "$DB_ROOT_PASSWORD" ]; then
+    if [ -z "${DB_ROOT_PASSWORD:-}" ]; then
         # Thử load env nếu chưa có
         [ -f "$SCRIPT_DIR/.env" ] && source "$SCRIPT_DIR/.env"
     fi
-    
-    if [ -z "$DB_ROOT_PASSWORD" ]; then
+
+    if [ -z "${DB_ROOT_PASSWORD:-}" ]; then
         error "Không tìm thấy DB_ROOT_PASSWORD. Hãy chạy install.sh trước."
+        return 1
     fi
 
-    local tmp_cnf="/tmp/.vps_mysql_$RANDOM.cnf"
-    
-    # Tạo cấu hình tạm
-    cat > "$tmp_cnf" <<'EOF'
-[client]
-user=root
-password="${DB_ROOT_PASSWORD}"
-EOF
-    # Inject giá trị thực của biến vào file (Cách này an toàn hơn <<EOF trực tiếp khi có ký tự lạ)
-    sed -i "s/\${DB_ROOT_PASSWORD}/${DB_ROOT_PASSWORD}/g" "$tmp_cnf"
+    # Tạo file tạm an toàn: mktemp sinh tên ngẫu nhiên mạnh hơn $RANDOM
+    local tmp_cnf
+    tmp_cnf=$(mktemp /tmp/.vps_mysql_XXXXXX.cnf)
+    # chmod 600 TRƯỚC khi ghi nội dung để tránh race condition TOCTOU
     chmod 600 "$tmp_cnf"
-    
+
+    # Dùng printf thay vì sed để tránh injection khi password chứa ký tự đặc biệt (/, &, \)
+    printf '[client]\nuser=root\npassword=%s\n' "$DB_ROOT_PASSWORD" > "$tmp_cnf"
+
     # Thực thi (Dùng sudo để chắc chắn có quyền truy cập socket)
     sudo mysql --defaults-extra-file="$tmp_cnf" -e "$query"
+    local _exit_code=$?
 
-    
-    # Dọn dẹp
+    # Dọn dẹp — luôn xóa dù lệnh thành công hay thất bại
     rm -f "$tmp_cnf"
+    return $_exit_code
 }
 
 # -------------------------------------------------------------------------
@@ -93,7 +115,7 @@ get_site_list() {
 select_site_menu() {
     local header="$1"
     local sites=($(get_site_list))
-    
+
     if [ ${#sites[@]} -eq 0 ]; then
         error "Hiện chưa có Website nào được tạo! Vui lòng chọn mục '1. Thêm Website' trước." >&2
         echo -e "" >&2
@@ -104,7 +126,7 @@ select_site_menu() {
     echo -e "${CYAN}------------------------------------------${NC}" >&2
     echo -e "${YELLOW} ${header:-DANH SÁCH WEBSITE ĐANG CÓ:}${NC}" >&2
     echo -e "${CYAN}------------------------------------------${NC}" >&2
-    
+
     local i=1
     for site in "${sites[@]}"; do
         echo -e " ${GREEN}$i.${NC} $site" >&2

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # modules/info.sh
 # Xem thông tin cấu hình chi tiết của 1 Website
+set -uo pipefail   # Bắt lỗi unbound variable và pipeline fail (không dùng -e để giữ menu cuầm khi có lỗi)
 
 run_site_info() {
     local domain="$1"
@@ -8,9 +9,11 @@ run_site_info() {
     
     if [ ! -f "$SITE_ENV" ]; then
         error "Không tìm thấy cấu hình cho site: $domain"
+        return 1
     fi
 
-    # Load env của site
+    # Load env của site (validate trước khi source để tránh code injection)
+    validate_env_file "$SITE_ENV" || return 1
     source "$SITE_ENV"
 
     # Kiểm tra SSL
@@ -39,10 +42,21 @@ run_site_info() {
         ssr_status="${GREEN}Đang hoạt động (Cổng: ${SSR_PORT:-13714})${NC}"
     fi
 
-    # Lấy SSH Public Key
+    # Lấy SSH Public Key (validate path để tránh path traversal)
     local public_key="Không tìm thấy SSH Key"
-    if [ -f "${SSH_KEY_PATH}.pub" ]; then
-        public_key=$(cat "${SSH_KEY_PATH}.pub")
+    if [ -n "${SSH_KEY_PATH:-}" ]; then
+        local resolved_pub
+        resolved_pub=$(realpath "${SSH_KEY_PATH}.pub" 2>/dev/null || true)
+        local safe_key_dir
+        safe_key_dir=$(realpath "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")
+        # Chỉ đọc nếu file .pub nằm trong SCRIPT_DIR và đúng extension
+        if [[ "$resolved_pub" == "${safe_key_dir}"* ]] && \
+           [[ "$resolved_pub" == *.pub ]] && \
+           [ -f "$resolved_pub" ]; then
+            public_key=$(cat "$resolved_pub")
+        else
+            public_key="[INVALID PATH — xem lại SSH_KEY_PATH trong sites/.env.${domain}]"
+        fi
     fi
 
     echo -e "${CYAN}==========================================${NC}"
@@ -53,7 +67,13 @@ run_site_info() {
     echo -e " ${BLUE}Web Root      :${NC} /var/www/${domain}"
     echo -e " ${BLUE}Database Name :${NC} ${DB_NAME}"
     echo -e " ${BLUE}Database User :${NC} ${DB_USER}"
-    echo -e " ${BLUE}Database Pass :${NC} ${DB_PASSWORD}"
+    # Che mật khẩu — không in plaintext ra terminal
+    local masked_pass="[hidden]"
+    if [ -n "${DB_PASSWORD:-}" ]; then
+        local pass_len=${#DB_PASSWORD}
+        masked_pass="${DB_PASSWORD:0:2}$(printf '%0.s*' $(seq 1 $((pass_len - 2))))  (${pass_len} ký tự)"
+    fi
+    echo -e " ${BLUE}Database Pass :${NC} ${masked_pass}"
     echo -e " ${BLUE}SSL Status    :${NC} ${ssl_status}"
     echo -e " ${BLUE}Nginx Config  :${NC} ${nginx_status}"
     echo -e " ${BLUE}Queue Worker  :${NC} ${queue_status}"

@@ -29,7 +29,19 @@ require_root() {
 }
 
 # Xoá các biến môi trường của Site trước khi nạp Site mới để tránh rò rỉ dữ liệu (Env Leak)
+# Nhận domain cũ (tuỳ chọn) để tự động unset biến từ env file đó
 reset_env_vars() {
+    local old_domain="${1:-}"
+    # Nếu có domain cũ, unset tất cả biến được define trong env file của nó
+    if [ -n "$old_domain" ]; then
+        local old_env="$SCRIPT_DIR/sites/.env.$old_domain"
+        if [ -f "$old_env" ]; then
+            while IFS='=' read -r key _; do
+                [[ "$key" =~ ^[A-Z_][A-Z0-9_]*$ ]] && unset "$key"
+            done < <(grep -E '^[A-Z_][A-Z0-9_]*=' "$old_env" 2>/dev/null)
+        fi
+    fi
+    # Fallback: unset danh sách biến cố định đã biết
     unset APP_DOMAIN PHP_VERSION USE_JWT USE_SSR SSR_PORT SSH_KEY_PATH
     unset DB_NAME DB_USER DB_PASSWORD GIT_REPO HEALTH_CHECK_URL
 }
@@ -41,18 +53,18 @@ load_env() {
     # Load Global Settings (Telegram mappers, Default PHP...)
     if [ -f "$SCRIPT_DIR/.env" ]; then
         harden_permissions "$SCRIPT_DIR/.env"
-        source "$SCRIPT_DIR/.env"
+        validate_env_file "$SCRIPT_DIR/.env" && source "$SCRIPT_DIR/.env"
     else
         warn "Không tìm thấy cấu hình chung .env tại $SCRIPT_DIR, dùng .env.global.example..."
-        source "$SCRIPT_DIR/.env.global.example"
+        validate_env_file "$SCRIPT_DIR/.env.global.example" && source "$SCRIPT_DIR/.env.global.example"
     fi
 
     # Load Domain Settings (nếu có site dc truyền vào)
-    if [ ! -z "$domain" ]; then
+    if [ -n "$domain" ]; then
         local site_env="$SCRIPT_DIR/sites/.env.$domain"
         if [ -f "$site_env" ]; then
             harden_permissions "$site_env"
-            source "$site_env"
+            validate_env_file "$site_env" && source "$site_env"
         elif [ "$2" != "--skip-check" ]; then
             error "Không tìm thấy cấu hình cho site: $domain (tại sites/.env.$domain)"
         fi
@@ -161,9 +173,13 @@ execute_action() {
     local extra_arg="$3"
     
     # Kiểm tra tính hợp lệ của định dạng Tên Miền (Nếu có tham số domain)
-    if [ ! -z "$domain_arg" ]; then
-        if [[ ! "$domain_arg" =~ ^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+    if [ -n "$domain_arg" ]; then
+        # Regex chặt theo RFC 1035: mỗi label không bắt đầu/kết thúc bằng dấu gạch ngang
+        # Không cho phép path traversal (/../), max 253 ký tự
+        local domain_regex='^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
+        if [[ ! "$domain_arg" =~ $domain_regex ]] || [ ${#domain_arg} -gt 253 ]; then
             error "Tên miền '$domain_arg' bị sai định dạng chuẩn! Vui lòng nhập đúng (VD: example.com, sub.demo.vn)"
+            return 1
         fi
     fi
     
