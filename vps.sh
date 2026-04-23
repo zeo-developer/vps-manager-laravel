@@ -174,6 +174,7 @@ show_cli_menu() {
                DOMAIN_PROMPT=$(select_site_menu "Chọn domain chính quản lý Alias")
                [ $? -ne 0 ] && continue
                execute_action "manage-alias" "$DOMAIN_PROMPT"
+               [ $? -eq 2 ] && continue
                ;;
             15)
                execute_action "manage-swap"

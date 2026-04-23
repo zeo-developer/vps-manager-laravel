@@ -222,7 +222,7 @@ run_manage_alias() {
             read -p "Nhập domain alias muốn xóa: " del_alias
             run_remove_alias "$primary" "$del_alias"
             ;;
-        0) return 0 ;;
+        0) return 2 ;;
         *) warn "Lựa chọn không hợp lệ." ;;
     esac
 }
