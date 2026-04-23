@@ -90,12 +90,11 @@ show_cli_menu() {
         echo -e " ${YELLOW}11.${NC} Cập nhật máy chủ (OS Update)"
         echo -e " ${YELLOW}12.${NC} Giám sát hệ thống (Telegram Monitor)"
         echo -e " ${GREEN}13.${NC} Đổi tên miền Website"
-        echo -e " ${GREEN}14.${NC} Thêm Domain Alias"
-        echo -e " ${GREEN}15.${NC} Xóa Domain Alias"
-        echo -e " ${YELLOW}16.${NC} Quản lý SWAP Memory"
+        echo -e " ${GREEN}14.${NC} Quản lý Domain Alias"
+        echo -e " ${YELLOW}15.${NC} Quản lý SWAP Memory"
         echo -e " ${RED}0.${NC} Thoát"
         echo -e "------------------------------------------"
-        read -p "Nhập lựa chọn (0-16): " choice
+        read -p "Nhập lựa chọn (0-15): " choice
 
         DOMAIN_PROMPT=""
         case $choice in
@@ -172,16 +171,11 @@ show_cli_menu() {
                execute_action "rename-domain" "$DOMAIN_PROMPT" "$NEW_DOMAIN_PROMPT"
                ;;
             14)
-               DOMAIN_PROMPT=$(select_site_menu "Chọn domain chính thêm Alias")
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain chính quản lý Alias")
                [ $? -ne 0 ] && continue
-               execute_action "add-alias" "$DOMAIN_PROMPT" ""
+               execute_action "manage-alias" "$DOMAIN_PROMPT"
                ;;
             15)
-               DOMAIN_PROMPT=$(select_site_menu "Chọn domain chính xóa Alias")
-               [ $? -ne 0 ] && continue
-               execute_action "remove-alias" "$DOMAIN_PROMPT" ""
-               ;;
-            16)
                execute_action "manage-swap"
                ;;
             0) exit 0 ;;
@@ -325,6 +319,13 @@ execute_action() {
                 # Interactive mode: mục 2 trong manage_alias
                 run_manage_alias "$domain_arg"
             fi
+            ;;
+        manage-alias)
+            require_root
+            if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
+            load_env "$domain_arg"
+            source "$SCRIPT_DIR/modules/alias.sh"
+            run_manage_alias "$domain_arg"
             ;;
         manage-swap)
             require_root
