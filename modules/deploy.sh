@@ -4,6 +4,31 @@
 
 # Các biến đường dẫn sẽ được khởi tạo động bên trong hàm run_deploy
 
+run_migration_with_detection() {
+    local migrate_output=""
+    local status=0
+
+    MIGRATE_NEW=false
+
+    migrate_output=$(sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force 2>&1)
+    status=$?
+
+    echo "$migrate_output"
+
+    if [[ "$migrate_output" != *"Nothing to migrate"* ]]; then
+        MIGRATE_NEW=true
+    fi
+
+    return $status
+}
+
+rollback_new_migrations_if_needed() {
+    if [ "$MIGRATE_NEW" = true ]; then
+        warn "Phát hiện migration mới. Đang rollback database..."
+        sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate:rollback --force || warn "⚠️ Rollback DB tự động thất bại"
+    fi
+}
+
 run_deploy() {
     local DEPLOY_MODE="${1:-zdt}"
     # Kiểm tra Website có tồn tại thật hay không (Dựa trên file env của site)
@@ -28,6 +53,8 @@ run_deploy() {
     # "Nhảy" vào vùng an toàn (BASE_DIR) để tránh lỗi getcwd() của www-data
     # Nếu đang đứng ở /root, user www-data sẽ không có quyền truy cập vào CWD hiện tại.
     cd "$BASE_DIR" || cd /tmp
+
+    MIGRATE_NEW=false
 
     # Đảm bảo quyền sở hữu cho APP_USER
     chown -R "$APP_USER":"$APP_USER" "$BASE_DIR"
@@ -113,8 +140,8 @@ run_deploy() {
         # Laravel commands
         if [ -f "artisan" ]; then
             info "Thực thi Migrations & Clear Cache..."
-            sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { error "Lỗi khi chạy migration"; return 1; }
-            sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { error "Lỗi khi clear optimize"; return 1; }
+            run_migration_with_detection || { error "Lỗi khi chạy migration"; return 1; }
+            sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { rollback_new_migrations_if_needed; error "Lỗi khi clear optimize"; return 1; }
         fi
 
         # Reload PHP-FPM
@@ -131,6 +158,8 @@ run_deploy() {
         # Hàm dọn dẹp nội bộ nếu quy trình build thất bại
         cleanup_failed_release() {
             if [ -d "$NEW_RELEASE" ]; then
+                cd "$NEW_RELEASE" || return 1
+                rollback_new_migrations_if_needed
                 cd "$RELEASES_DIR" || cd /tmp
                 warn "Lỗi tiến trình build. Đang dọn dẹp release: $TIMESTAMP"
                 rm -rf "$NEW_RELEASE"
@@ -191,7 +220,7 @@ run_deploy() {
         # 4. Laravel commands
         if [ -f "artisan" ]; then
             sudo -u "$APP_USER" php${PHP_VERSION} artisan storage:link --force || warn "⚠️ Không thể tạo storage:link"
-            sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
+            run_migration_with_detection || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
 
             # 4.1 JWT Secret (Khởi tạo nếu chưa có giá trị)
             if [ "$USE_JWT" = "true" ]; then
