@@ -30,6 +30,27 @@ get_site_node_env_file() {
     echo "$SCRIPT_DIR/sites/.env.${domain}"
 }
 
+resolve_n_node_version_dir() {
+    local target_ver
+    target_ver=$(normalize_node_version "$1")
+    local versions_root="/usr/local/n/versions/node"
+    local exact_dir="${versions_root}/${target_ver}"
+
+    if [ -x "${exact_dir}/bin/node" ]; then
+        echo "$exact_dir"
+        return 0
+    fi
+
+    local matched_dir
+    matched_dir=$(find "$versions_root" -maxdepth 1 -mindepth 1 -type d -name "${target_ver}.*" 2>/dev/null | sort -V | tail -n 1)
+    if [ -n "$matched_dir" ] && [ -x "${matched_dir}/bin/node" ]; then
+        echo "$matched_dir"
+        return 0
+    fi
+
+    return 1
+}
+
 ensure_node_manager() {
     if ! command -v node >/dev/null 2>&1; then
         local bootstrap_ver="${NODE_VERSION:-20}"
@@ -62,6 +83,11 @@ install_node_runtime() {
     info "Đảm bảo Node.js ${target_ver}.x đã được cài trong n..."
     n "$target_ver"
     hash -r 2>/dev/null || true
+
+    if ! resolve_n_node_version_dir "$target_ver" >/dev/null; then
+        error "Không tìm thấy Node.js ${target_ver}.x trong /usr/local/n/versions/node sau khi cài."
+        return 1
+    fi
 }
 
 create_site_node_wrappers() {
@@ -70,9 +96,11 @@ create_site_node_wrappers() {
     target_ver=$(normalize_node_version "$2")
     local bin_dir
     bin_dir=$(get_site_node_bin_dir "$domain")
-    local node_path="/usr/local/n/versions/node/${target_ver}/bin/node"
-    local npm_path="/usr/local/n/versions/node/${target_ver}/bin/npm"
-    local npx_path="/usr/local/n/versions/node/${target_ver}/bin/npx"
+    local node_dir
+    node_dir=$(resolve_n_node_version_dir "$target_ver") || { error "Không tìm thấy Node binary cho Node.js ${target_ver}.x trong /usr/local/n/versions/node"; return 1; }
+    local node_path="${node_dir}/bin/node"
+    local npm_path="${node_dir}/bin/npm"
+    local npx_path="${node_dir}/bin/npx"
 
     if [ ! -x "$node_path" ]; then
         error "Không tìm thấy Node binary: $node_path"
@@ -86,13 +114,13 @@ exec "${node_path}" "\$@"
 EOF
     cat > "${bin_dir}/npm" <<EOF
 #!/usr/bin/env bash
-export PATH="/usr/local/n/versions/node/${target_ver}/bin:\$PATH"
+export PATH="${node_dir}/bin:\$PATH"
 exec "${npm_path}" "\$@"
 EOF
     if [ -x "$npx_path" ]; then
         cat > "${bin_dir}/npx" <<EOF
 #!/usr/bin/env bash
-export PATH="/usr/local/n/versions/node/${target_ver}/bin:\$PATH"
+export PATH="${node_dir}/bin:\$PATH"
 exec "${npx_path}" "\$@"
 EOF
     fi
