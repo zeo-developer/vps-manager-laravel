@@ -166,19 +166,19 @@ show_site_node_status() {
 
 select_node_version_menu() {
     local current_major="${1:-}"
-    echo -e "${CYAN}Chọn phiên bản Node.js:${NC}"
+    echo -e "${CYAN}Chọn phiên bản Node.js:${NC}" >&2
     local i=1
     local version label
     for version in "${NODE_SUPPORTED_VERSIONS[@]}"; do
         label="Node.js ${version}.x"
         [ "$current_major" = "$version" ] && label="${label} [Đang dùng]"
-        echo -e "  ${GREEN}${i}.${NC} ${label}"
+        echo -e "  ${GREEN}${i}.${NC} ${label}" >&2
         i=$((i + 1))
     done
-    echo -e "  ${RED}0.${NC} Quay lại"
+    echo -e "  ${RED}0.${NC} Quay lại" >&2
 
     local choice
-    read -p "Lựa chọn (0-$((i-1))): " choice
+    read -r -p "Lựa chọn (0-$((i-1))): " choice
     [ "$choice" = "0" ] && return 1
     if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -lt "$i" ]; then
         echo "${NODE_SUPPORTED_VERSIONS[$((choice-1))]}"
