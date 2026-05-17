@@ -92,9 +92,10 @@ show_cli_menu() {
         echo -e " ${GREEN}13.${NC} Đổi tên miền Website"
         echo -e " ${GREEN}14.${NC} Quản lý Domain Alias"
         echo -e " ${YELLOW}15.${NC} Quản lý SWAP Memory"
+        echo -e " ${YELLOW}16.${NC} Quản lý Version Node.js"
         echo -e " ${RED}0.${NC} Thoát"
         echo -e "------------------------------------------"
-        read -p "Nhập lựa chọn (0-15): " choice
+        read -p "Nhập lựa chọn (0-16): " choice
 
         DOMAIN_PROMPT=""
         case $choice in
@@ -178,6 +179,12 @@ show_cli_menu() {
                ;;
             15)
                execute_action "manage-swap"
+               ;;
+            16)
+               DOMAIN_PROMPT=$(select_site_menu "Chọn domain quản lý Node.js")
+               [ $? -ne 0 ] && continue
+               execute_action "manage-node" "$DOMAIN_PROMPT"
+               [ $? -eq 2 ] && continue
                ;;
             0) exit 0 ;;
             *) warn "Lựa chọn không hợp lệ." ;;
@@ -332,6 +339,13 @@ execute_action() {
             require_root
             source "$SCRIPT_DIR/modules/swap.sh"
             run_swap_manager
+            ;;
+        manage-node)
+            require_root
+            if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền: ./vps.sh manage-node demo.com"; fi
+            load_env "$domain_arg"
+            source "$SCRIPT_DIR/modules/node-version.sh"
+            run_node_manager "$domain_arg"
             ;;
         *)
             error "Lệnh '${cmd}' không tồn tại."

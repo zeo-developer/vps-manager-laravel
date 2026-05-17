@@ -35,6 +35,23 @@ run_add_site() {
     sed -i "s/^PHP_VERSION=.*/PHP_VERSION=\"${PHP_VER_SELECTED}\"/" "$SITE_ENV"
     info "PHP Version: ${PHP_VER_SELECTED}"
 
+    # 1.1b Chọn phiên bản Node.js riêng cho dự án
+    source "$SCRIPT_DIR/modules/node-version.sh"
+    echo -e "${CYAN}Chọn phiên bản Node.js cho Website:${NC}"
+    echo -e "  ${GREEN}1.${NC} Node.js 18.x"
+    echo -e "  ${GREEN}2.${NC} Node.js 20.x"
+    echo -e "  ${GREEN}3.${NC} Node.js 22.x"
+    echo -e "  ${GREEN}4.${NC} Node.js 24.x"
+    read -p "Lựa chọn (mặc định 2): " node_choice
+    case $node_choice in
+        1) NODE_VER_SELECTED="18" ;;
+        3) NODE_VER_SELECTED="22" ;;
+        4) NODE_VER_SELECTED="24" ;;
+        *) NODE_VER_SELECTED="20" ;;
+    esac
+    sed -i "s/^NODE_VERSION=.*/NODE_VERSION=\"${NODE_VER_SELECTED}\"/" "$SITE_ENV"
+    info "Node.js Version: ${NODE_VER_SELECTED}.x"
+
     # Tự động cài đặt PHP PHP_VER_SELECTED nếu hệ thống chưa có
     if [ ! -d "/etc/php/${PHP_VER_SELECTED}/fpm" ]; then
         info "PHP ${PHP_VER_SELECTED} chưa được cài đặt. Bắt đầu cài đặt..."
@@ -216,7 +233,7 @@ user=${app_user}
 redirect_stderr=true
 stdout_logfile=/var/www/${domain}/shared/storage/logs/ssr.log
 stopwaitsecs=3600
-environment=NODE_PORT=${ssr_port}
+environment=NODE_PORT=${ssr_port},PATH="/var/www/${domain}/node-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 SSR_EOF
 )
 
@@ -247,6 +264,7 @@ EOF
     info " DB Name/User : $raw_db_name"
     info " DB Password  : $raw_db_pass"
     [ "$use_ssr" = "true" ] && info " SSR Port     : $ssr_port"
+    info " Node.js      : ${NODE_VER_SELECTED}.x"
     [ "$use_reverb" = "true" ] && info " Reverb Port  : $reverb_port"
     info "-----------------------------------------------------------------"
     info " SSH Public Key (Thêm vào Deploy Keys trên GitHub):"

@@ -44,6 +44,9 @@ run_deploy() {
         info "Bắt đầu Zero-Downtime Deploy: $APP_DOMAIN..."
     fi
 
+    source "$SCRIPT_DIR/modules/node-version.sh"
+    ensure_site_node_version "$APP_DOMAIN" "${NODE_VERSION:-20}" || return 1
+
     # Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
     local BASE_DIR="/var/www/${APP_DOMAIN}"
     local RELEASES_DIR="${BASE_DIR}/releases"
@@ -212,9 +215,9 @@ run_deploy() {
 
         # 3. Build Dependencies (NPM)
         if [ -f "package.json" ]; then
-            info "Cài đặt & Build NPM packages..."
-            sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
-            sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
+            info "Cài đặt & Build NPM packages bằng Node.js ${NODE_VERSION:-20}.x..."
+            run_site_node_cmd "$APP_DOMAIN" sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
+            run_site_node_cmd "$APP_DOMAIN" sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
         fi
 
         # 4. Laravel commands
@@ -240,7 +243,7 @@ run_deploy() {
         # 4.2 Inertia SSR
         if [ "$USE_SSR" = "true" ] && [ -f "package.json" ]; then
             if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
-                sudo -u "$APP_USER" npm run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
+                run_site_node_cmd "$APP_DOMAIN" sudo -u "$APP_USER" npm run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
             fi
         fi
 

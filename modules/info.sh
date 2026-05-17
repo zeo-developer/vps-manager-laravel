@@ -41,6 +41,12 @@ run_site_info() {
         ssr_status="${GREEN}Đang hoạt động (Cổng: ${SSR_PORT:-13714})${NC}"
     fi
 
+    local node_status="${NODE_VERSION:-20}.x"
+    local node_bin="/var/www/${domain}/node-bin/node"
+    if [ -x "$node_bin" ]; then
+        node_status="$($node_bin -v 2>/dev/null)"
+    fi
+
     # Lấy SSH Public Key
     local public_key="Không tìm thấy SSH Key"
     if [ -n "${SSH_KEY_PATH:-}" ]; then
@@ -65,6 +71,7 @@ run_site_info() {
     echo -e "${CYAN}==========================================${NC}"
     echo -e " ${BLUE}Domain        :${NC} ${domain}"
     echo -e " ${BLUE}PHP Version   :${NC} ${PHP_VERSION}"
+    echo -e " ${BLUE}Node.js       :${NC} ${node_status}"
     echo -e " ${BLUE}Web Root      :${NC} /var/www/${domain}"
     echo -e " ${BLUE}Database Name :${NC} ${DB_NAME}"
     echo -e " ${BLUE}Database User :${NC} ${DB_USER}"

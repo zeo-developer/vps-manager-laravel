@@ -17,6 +17,7 @@ Dự án tập trung vào 3 tiêu chí cốt lõi: **Hiệu năng (Performance)*
 ### 🏗️ Quản Trị Đa Dự Án (Multi-Site & Isolation)
 *   **SSH Isolation**: Định danh độc lập phân tách SSH Key cho từng website. Cơ chế này đảm bảo máy chủ kết nối an toàn với nhiều Repository lưu trữ khác nhau mà không phát sinh xung đột định danh.
 *   **PHP Versioning**: Hỗ trợ chỉ định và chuyển đổi phiên bản PHP (8.1, 8.2, 8.3, 8.4) phân lập cho từng tên miền (domain) cụ thể thông qua cấu hình Nginx Handler nội bộ.
+*   **Node.js Versioning**: Mỗi website có `NODE_VERSION` riêng và wrapper `node/npm/npx` riêng tại `/var/www/<domain>/node-bin`, đảm bảo build Vite/Inertia SSR chạy đúng runtime theo site.
 *   **Database Isolation**: Định tuyến cơ sở dữ liệu và người dùng riêng biệt trên hệ sinh thái MariaDB cho mỗi dự án, tuân thủ nguyên tắc an toàn dữ liệu và quyền truy cập.
 
 ### 🌐 Domain Identity & Routing
@@ -56,6 +57,7 @@ Dự án tập trung vào 3 tiêu chí cốt lõi: **Hiệu năng (Performance)*
 │   ├── rename-domain.sh    # Đồng bộ hóa thay đổi Namespace ứng dụng Domain Base
 │   ├── alias.sh            # Gắn kết cấu trúc bản sao tên miền trỏ về Domain Parent
 │   ├── swap.sh             # Thiết đặt phân bổ hệ điều hành tạo ảo Volume SWAP
+│   ├── node-version.sh     # Quản lý cài đặt và chuyển đổi phiên bản Node.js Runtime
 │   ├── monitor.sh          # Payload Alert Engine bắn thông cáo Event sang Telegram API
 │   ├── remove-site.sh      # Thực thi quy trình hủy phân vùng độc lập để giải phóng tài nguyên
 │   ├── update.sh           # Xác minh các Dependencies và nâng cấp gói Repository APT 
@@ -116,7 +118,7 @@ sudo vps
 
 ## 🖥️ 6. Chi Tiết Tính Năng Cốt Lõi (CLI Menu Reference)
 
-Bảng điều khiển (Menu) của hệ thống bao gồm **15 chức năng** giúp đơn giản hóa các thao tác quản trị phức tạp:
+Bảng điều khiển (Menu) của hệ thống bao gồm **16 chức năng** giúp đơn giản hóa các thao tác quản trị phức tạp:
 
 1.  **Thêm Website (Add Site)**: Tự động khởi tạo toàn bộ không gian cho website mới: Tạo thư mục chứa code, cài đặt Database phân quyền riêng, tạo thư mục mã hóa SSH Key, và chuẩn bị cấu hình Nginx/Supervisor.
 2.  **Quản Lý SSL (SSL Manager)**: Cài đặt và tự động gia hạn chứng chỉ bảo mật HTTPS (Let's Encrypt) chuẩn hóa vào cấu hình Nginx.
@@ -135,6 +137,7 @@ Bảng điều khiển (Menu) của hệ thống bao gồm **15 chức năng** g
 13. **Đổi Tên Miền (Rename Domain)**: Giúp dự án "thay tên đổi họ" cấp tốc mà vẫn an toàn. Tool sẽ tự động xử lý đổi tên Thư mục, CSDL, cấu trúc Symlink User cho tên miền hoàn toàn mới.
 14. **Quản Lý Domain Ánh Xạ (Domain Alias)**: Cho phép kết nối nhiều cụm tên miền mở rộng (.vn, .net) vào hoạt động chung một Core Source gốc `.com` bằng Nginx Server name ảo. Và bạn có quyền Thêm hoặc Gỡ alias dễ dàng.
 15. **Quản Lý Bộ Nhớ Ảo (SWAP Memory)**: Tính năng cứu nguy khi VPS có dung lượng cấu hình thụ động thấp. Nó cho phép bạn trích tạo thêm ổ cứng chuyển thành lượng Cache SWAP giả lập RAM, giải quyết triệt để lỗi giật "Out Of Memory" khi đang chạy lệnh cài đặt NPM (Node / Vite / Npm install) nặng.
+16. **Quản Lý Version Node.js**: Cài đặt và gán phiên bản Node.js riêng cho từng website (18.x, 20.x, 22.x, 24.x). Deploy/NPM build/SSR sẽ dùng wrapper `/var/www/<domain>/node-bin` theo `NODE_VERSION` của site.
 
 ---
 
