@@ -150,6 +150,32 @@ set_site_node_version() {
 
     info "Site [${domain}] dùng Node.js ${target_ver}.x"
     info "Wrapper: $(get_site_node_bin_dir "$domain")"
+    patch_site_ssr_supervisor_env "$domain"
+}
+
+patch_site_ssr_supervisor_env() {
+    local domain="$1"
+    local safe_domain
+    safe_domain=$(get_safe_domain "$domain")
+    local supervisor_conf="/etc/supervisor/conf.d/${safe_domain}.conf"
+    local bin_dir
+    bin_dir=$(get_site_node_bin_dir "$domain")
+    local ssr_port="${SSR_PORT:-13714}"
+    local env_line="environment=NODE_PORT=${ssr_port},PATH=\"${bin_dir}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\""
+
+    [ ! -f "$supervisor_conf" ] && return 0
+    grep -q "^\[program:${safe_domain}-ssr\]" "$supervisor_conf" || return 0
+
+    if sed -n "/^\[program:${safe_domain}-ssr\]/,/^\[/p" "$supervisor_conf" | grep -q "^environment="; then
+        sed -i "/^\[program:${safe_domain}-ssr\]/,/^\[/ s|^environment=.*|${env_line}|" "$supervisor_conf"
+    else
+        sed -i "/^\[program:${safe_domain}-ssr\]/,/^\[/ s|^stopwaitsecs=.*|&\n${env_line}|" "$supervisor_conf"
+    fi
+
+    supervisorctl reread >/dev/null 2>&1 || true
+    supervisorctl update >/dev/null 2>&1 || true
+    supervisorctl restart "${safe_domain}:${safe_domain}-ssr" >/dev/null 2>&1 || true
+    info "Đã cập nhật Supervisor SSR environment cho ${domain}"
 }
 
 ensure_site_node_version() {
