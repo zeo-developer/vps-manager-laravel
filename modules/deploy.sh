@@ -192,19 +192,20 @@ run_deploy() {
         if [ -f "artisan" ]; then
             sudo -u "$APP_USER" php${PHP_VERSION} artisan storage:link --force || warn "⚠️ Không thể tạo storage:link"
             sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
+
+            # 4.1 JWT Secret (Khởi tạo nếu chưa có giá trị)
+            if [ "$USE_JWT" = "true" ]; then
+                # Kiểm tra nếu JWT_SECRET chưa có giá trị (trống hoặc chưa tồn tại dòng đó)
+                if ! grep -q "^JWT_SECRET=.\+" "${SHARED_DIR}/.env" 2>/dev/null; then
+                    info "Khởi tạo JWT Secret..."
+                    sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
+                fi
+            fi
+
             sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
             sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
             sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache || { cleanup_failed_release; error "Lỗi khi cache route"; return 1; }
             sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache || { cleanup_failed_release; error "Lỗi khi cache view"; return 1; }
-        fi
-
-        # 4.1 JWT Secret (Khởi tạo nếu chưa có giá trị)
-        if [ "$USE_JWT" = "true" ] && [ -f "artisan" ]; then
-            # Kiểm tra nếu JWT_SECRET chưa có giá trị (trống hoặc chưa tồn tại dòng đó)
-            if ! grep -q "^JWT_SECRET=.\+" "${SHARED_DIR}/.env" 2>/dev/null; then
-                info "Khởi tạo JWT Secret..."
-                sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
-            fi
         fi
 
         # 4.2 Inertia SSR
