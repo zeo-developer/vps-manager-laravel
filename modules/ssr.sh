@@ -21,7 +21,10 @@ upsert_env_value() {
 
     [ ! -f "$env_file" ] && touch "$env_file"
     if grep -q "^${key}=" "$env_file"; then
-        sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+        # Dùng awk thay sed để an toàn với value chứa ký tự đặc biệt (/, |, &, ...)
+        awk -v key="${key}" -v val="${value}" \
+            'BEGIN{FS="="} /^[[:space:]]*#/{print;next} $1==key{print key"="val;next} {print}' \
+            "$env_file" > "${env_file}.tmp" && mv "${env_file}.tmp" "$env_file"
     else
         echo "${key}=${value}" >> "$env_file"
     fi
@@ -93,6 +96,8 @@ sync_inertia_ssr_to_laravel_env() {
 
     source "$site_env"
     if [ "${USE_SSR:-false}" = "true" ]; then
+        # ensure_site_ssr_port sẽ source lại $site_env nếu cần cấp SSR_PORT mới.
+        # Sau đó source lại để đảm bảo biến SSR_PORT được cập nhật trong shell hiện tại.
         ensure_site_ssr_port "$domain" || return 1
         source "$site_env"
         local port="${SSR_PORT:-13714}"

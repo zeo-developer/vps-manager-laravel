@@ -133,7 +133,12 @@ EOF
     chown -R "${APP_USER:-www-data}":"${APP_USER:-www-data}" "$bin_dir" 2>/dev/null || true
 }
 
-set_site_node_version() {
+# ---------------------------------------------------------------------------
+# setup_site_node_wrappers <domain> <version>
+# Cài runtime + tạo wrapper + ghi NODE_VERSION vào site env.
+# KHÔNG restart Supervisor SSR — dùng cho deploy (deploy tự restart toàn group).
+# ---------------------------------------------------------------------------
+setup_site_node_wrappers() {
     local domain="$1"
     local target_ver
     target_ver=$(normalize_node_version "$2")
@@ -150,11 +155,24 @@ set_site_node_version() {
         echo "NODE_VERSION=\"${target_ver}\"" >> "$site_env"
     fi
     harden_permissions "$site_env"
+    info "Site [${domain}] dùng Node.js ${target_ver}.x (wrapper ready)"
+}
 
-    info "Site [${domain}] dùng Node.js ${target_ver}.x"
+# ---------------------------------------------------------------------------
+# set_site_node_version <domain> <version>
+# Cài runtime + tạo wrapper + patch Supervisor + RESTART SSR.
+# Dùng cho manage-node (thả công), không dùng trong deploy.
+# ---------------------------------------------------------------------------
+set_site_node_version() {
+    local domain="$1"
+    local target_ver
+    target_ver=$(normalize_node_version "$2")
+
+    setup_site_node_wrappers "$domain" "$target_ver" || return 1
+
     info "Wrapper: $(get_site_node_bin_dir "$domain")"
-    # Patch conf và restart ngay — đây là context đổi Node version thủ công (manage-node),
-    # không phải deploy (deploy sẽ restart toàn group ở bước sau).
+    # Patch conf và restart ngay — context manage-node (thủ công).
+    # Deploy không gọi hàm này; deploy gọi setup_site_node_wrappers.
     patch_site_ssr_supervisor_env "$domain"
     local safe_domain
     safe_domain=$(get_safe_domain "$domain")
@@ -167,12 +185,13 @@ set_site_node_version() {
     fi
 }
 
-
 ensure_site_node_version() {
     local domain="$1"
     local target_ver="${2:-${NODE_VERSION:-20}}"
     target_ver=$(normalize_node_version "$target_ver")
-    set_site_node_version "$domain" "$target_ver"
+    # Dùng setup (không restart SSR) vì được gọi bởi deploy.
+    # Deploy sẽ tự patch supervisor và restart toàn group.
+    setup_site_node_wrappers "$domain" "$target_ver"
 }
 
 run_site_node_cmd() {
