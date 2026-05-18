@@ -153,7 +153,18 @@ set_site_node_version() {
 
     info "Site [${domain}] dùng Node.js ${target_ver}.x"
     info "Wrapper: $(get_site_node_bin_dir "$domain")"
+    # Patch conf và restart ngay — đây là context đổi Node version thủ công (manage-node),
+    # không phải deploy (deploy sẽ restart toàn group ở bước sau).
     patch_site_ssr_supervisor_env "$domain"
+    local safe_domain
+    safe_domain=$(get_safe_domain "$domain")
+    local supervisor_conf="/etc/supervisor/conf.d/${safe_domain}.conf"
+    if [ -f "$supervisor_conf" ] && grep -q "^\[program:${safe_domain}-ssr\]" "$supervisor_conf" 2>/dev/null; then
+        supervisorctl reread >/dev/null 2>&1 || true
+        supervisorctl update >/dev/null 2>&1 || true
+        supervisorctl restart "${safe_domain}:${safe_domain}-ssr" >/dev/null 2>&1 || true
+        info "Đã restart Supervisor SSR cho ${domain}"
+    fi
 }
 
 

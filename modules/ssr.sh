@@ -111,7 +111,8 @@ sync_inertia_ssr_to_laravel_env() {
 # Cập nhật environment trong Supervisor conf của SSR process.
 # Chỉ patch PATH để process dùng đúng node-bin wrapper của site.
 # Không cần truyền port vào Supervisor — Laravel app đọc từ shared/.env.
-# Gọi sau khi symlink current được tạo, trước supervisorctl reload.
+# Hàm NÀY CHỈ PATCH FILE CONF, không tự restart supervisor.
+# Sau khi gọi hàm này, deploy sẽ tự làm supervisorctl reread/update/restart toàn group.
 # ---------------------------------------------------------------------------
 patch_site_ssr_supervisor_env() {
     local domain="$1"
@@ -130,8 +131,5 @@ patch_site_ssr_supervisor_env() {
         sed -i "/^\[program:${safe_domain}-ssr\]/,/^\[/ s|^stopwaitsecs=.*|&\n${env_line}|" "$supervisor_conf"
     fi
 
-    supervisorctl reread >/dev/null 2>&1 || true
-    supervisorctl update >/dev/null 2>&1 || true
-    supervisorctl restart "${safe_domain}:${safe_domain}-ssr" >/dev/null 2>&1 || true
-    info "Đã cập nhật Supervisor SSR PATH cho ${domain}"
+    info "Đã patch Supervisor SSR conf cho ${domain} (chưa restart)"
 }

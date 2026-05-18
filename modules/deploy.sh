@@ -256,6 +256,8 @@ run_deploy() {
         sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR" || { cleanup_failed_release; error "Không thể hoán đổi symlink current"; return 1; }
         
         systemctl reload "php${PHP_VERSION}-fpm"
+        # Patch Supervisor SSR conf (PATH node-bin) để supervisorctl update áp dụng đúng.
+        # Không cần restart riêng — supervisorctl restart toàn group ở bước dưới.
         patch_site_ssr_supervisor_env "$APP_DOMAIN"
         
         # Supervisor
