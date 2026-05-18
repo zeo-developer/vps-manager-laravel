@@ -63,6 +63,20 @@ run_change_php() {
         info "Cập nhật Nginx Worker Vhost Sock..."
         sed -i "s/php[0-9.]*-fpm.sock/php${target_ver}-fpm.sock/g" "$vhost"
         systemctl reload nginx
+
+        # 4. Cập nhật Supervisor conf — đổi command=phpX.X sang phpY.Y
+        local safe_domain
+        safe_domain=$(get_safe_domain "$domain")
+        local supervisor_conf="/etc/supervisor/conf.d/${safe_domain}.conf"
+        if [ -f "$supervisor_conf" ]; then
+            info "Cập nhật Supervisor conf sang PHP $target_ver..."
+            sed -i "s|command=php[0-9.]*\s|command=php${target_ver} |g" "$supervisor_conf"
+            supervisorctl reread >/dev/null 2>&1 || true
+            supervisorctl update >/dev/null 2>&1 || true
+            supervisorctl restart "${safe_domain}:*" >/dev/null 2>&1 \
+                || supervisorctl start "${safe_domain}:*" >/dev/null 2>&1 || true
+            info "Đã restart Supervisor group [${safe_domain}] với PHP $target_ver"
+        fi
         
         info "================================================================="
         info "✅ THÀNH CÔNG: WEBSITE [ $domain ] ĐÃ ĐƯỢC ĐỔI SANG CHẠY PHP $target_ver"
