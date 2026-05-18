@@ -80,8 +80,8 @@ run_add_site() {
     local ssr_port="13714"
     if [[ "$ssr_choice" =~ ^[Yy]$ ]]; then
         use_ssr="true"
-        # Tìm port lớn nhất hiện có và cộng 1
-        local last_port=$(grep -rh "SSR_PORT=" "$SCRIPT_DIR/sites/" | grep -oP '(?<=")\d+(?=")' | sort -n | tail -1)
+        # Tìm SSR_PORT lớn nhất hiện có và cộng 1
+        local last_port=$(grep -rh "^SSR_PORT=" "$SCRIPT_DIR/sites/" 2>/dev/null | sed -E 's/^SSR_PORT="?([0-9]+)"?.*/\1/' | sort -n | tail -1)
         if [ ! -z "$last_port" ]; then
             ssr_port=$((last_port + 1))
         fi
@@ -233,7 +233,7 @@ user=${app_user}
 redirect_stderr=true
 stdout_logfile=/var/www/${domain}/shared/storage/logs/ssr.log
 stopwaitsecs=3600
-environment=NODE_PORT=${ssr_port},PATH="/var/www/${domain}/node-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+environment=PATH="/var/www/${domain}/node-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 SSR_EOF
 )
 

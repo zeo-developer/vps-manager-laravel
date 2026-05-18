@@ -194,6 +194,8 @@ run_deploy() {
         sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
+        ensure_site_ssr_port "$APP_DOMAIN" || { cleanup_failed_release; error "Lỗi khi chuẩn hóa SSR_PORT"; return 1; }
+        sync_inertia_ssr_to_laravel_env "$APP_DOMAIN" || { cleanup_failed_release; error "Lỗi khi sync Inertia SSR env"; return 1; }
         
         # Link storage & env
         rm -rf "${NEW_RELEASE}/storage"
@@ -254,6 +256,7 @@ run_deploy() {
         sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR" || { cleanup_failed_release; error "Không thể hoán đổi symlink current"; return 1; }
         
         systemctl reload "php${PHP_VERSION}-fpm"
+        patch_site_ssr_supervisor_env "$APP_DOMAIN"
         
         # Supervisor
         local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")

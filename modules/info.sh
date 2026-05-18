@@ -38,7 +38,7 @@ run_site_info() {
     # Kiểm tra SSR Worker
     local ssr_status="${RED}Không chạy${NC}"
     if supervisorctl status "${SAFE_DOMAIN}:${SAFE_DOMAIN}-ssr" 2>/dev/null | grep -q "RUNNING"; then
-        ssr_status="${GREEN}Đang hoạt động (Cổng: ${SSR_PORT:-13714})${NC}"
+        ssr_status="${GREEN}Đang hoạt động (SSR_PORT: ${SSR_PORT:-13714}, URL: http://127.0.0.1:${SSR_PORT:-13714})${NC}"
     fi
 
     local node_status="${NODE_VERSION:-20}.x"
