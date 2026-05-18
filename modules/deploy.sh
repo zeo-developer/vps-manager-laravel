@@ -44,6 +44,9 @@ run_deploy() {
         info "Bắt đầu Zero-Downtime Deploy: $APP_DOMAIN..."
     fi
 
+    source "$SCRIPT_DIR/modules/node-version.sh"
+    ensure_site_node_version "$APP_DOMAIN" "${NODE_VERSION:-20}" || return 1
+
     # Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
     local BASE_DIR="/var/www/${APP_DOMAIN}"
     local RELEASES_DIR="${BASE_DIR}/releases"
@@ -191,6 +194,8 @@ run_deploy() {
         sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
+        ensure_site_ssr_port "$APP_DOMAIN" || { cleanup_failed_release; error "Lỗi khi chuẩn hóa SSR_PORT"; return 1; }
+        sync_inertia_ssr_to_laravel_env "$APP_DOMAIN" || { cleanup_failed_release; error "Lỗi khi sync Inertia SSR env"; return 1; }
         
         # Link storage & env
         rm -rf "${NEW_RELEASE}/storage"
@@ -212,9 +217,9 @@ run_deploy() {
 
         # 3. Build Dependencies (NPM)
         if [ -f "package.json" ]; then
-            info "Cài đặt & Build NPM packages..."
-            sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
-            sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
+            info "Cài đặt & Build NPM packages bằng Node.js ${NODE_VERSION:-20}.x..."
+            run_site_node_cmd "$APP_DOMAIN" sudo -u "$APP_USER" npm install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
+            run_site_node_cmd "$APP_DOMAIN" sudo -u "$APP_USER" npm run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
         fi
 
         # 4. Laravel commands
@@ -240,7 +245,7 @@ run_deploy() {
         # 4.2 Inertia SSR
         if [ "$USE_SSR" = "true" ] && [ -f "package.json" ]; then
             if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
-                sudo -u "$APP_USER" npm run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
+                run_site_node_cmd "$APP_DOMAIN" sudo -u "$APP_USER" npm run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
             fi
         fi
 
@@ -251,6 +256,9 @@ run_deploy() {
         sudo -u "$APP_USER" ln -nfs "$NEW_RELEASE" "$CURRENT_DIR" || { cleanup_failed_release; error "Không thể hoán đổi symlink current"; return 1; }
         
         systemctl reload "php${PHP_VERSION}-fpm"
+        # Patch Supervisor SSR conf (PATH node-bin) để supervisorctl update áp dụng đúng.
+        # Không cần restart riêng — supervisorctl restart toàn group ở bước dưới.
+        patch_site_ssr_supervisor_env "$APP_DOMAIN"
         
         # Supervisor
         local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
