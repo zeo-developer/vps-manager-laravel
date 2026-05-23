@@ -2,8 +2,7 @@
 # modules/node-version.sh
 # Quản lý Node.js version riêng cho từng site bằng 'n' + wrapper bin theo domain.
 
-# Load module SSR (port allocation, env sync, supervisor patch)
-source "$SCRIPT_DIR/modules/ssr.sh"
+
 
 NODE_SUPPORTED_VERSIONS=("18" "20" "22" "24")
 
@@ -173,16 +172,28 @@ set_site_node_version() {
     info "Wrapper: $(get_site_node_bin_dir "$domain")"
     # Patch conf và restart ngay — context manage-node (thủ công).
     # Deploy không gọi hàm này; deploy gọi setup_site_node_wrappers.
-    patch_site_ssr_supervisor_env "$domain"
+    # ---------------------------------------------------------
+    # Cập nhật đường dẫn node-bin cho SSR supervisor
+    # ---------------------------------------------------------
     local safe_domain
     safe_domain=$(get_safe_domain "$domain")
     local supervisor_conf="/etc/supervisor/conf.d/${safe_domain}.conf"
+    local env_line="environment=PATH=\"/var/www/${domain}/node-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\""
+    
     if [ -f "$supervisor_conf" ] && grep -q "^\[program:${safe_domain}-ssr\]" "$supervisor_conf" 2>/dev/null; then
+        if sed -n "/^\[program:${safe_domain}-ssr\]/,/^\[/p" "$supervisor_conf" | grep -q "^environment="; then
+            sed -i "/^\[program:${safe_domain}-ssr\]/,/^\[/ s|^environment=.*|${env_line}|" "$supervisor_conf"
+        else
+            sed -i "/^\[program:${safe_domain}-ssr\]/,/^\[/ s|^stopwaitsecs=.*|&\n${env_line}|" "$supervisor_conf"
+        fi
+        
+        # Tự động load và restart supervisor
         supervisorctl reread >/dev/null 2>&1 || true
         supervisorctl update >/dev/null 2>&1 || true
         supervisorctl restart "${safe_domain}:${safe_domain}-ssr" >/dev/null 2>&1 || true
-        info "Đã restart Supervisor SSR cho ${domain}"
+        info "Đã cập nhật PATH mới và restart Supervisor SSR cho ${domain}"
     fi
+    # ---------------------------------------------------------
 }
 
 ensure_site_node_version() {

@@ -194,8 +194,46 @@ run_deploy() {
         sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD}/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
         sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
-        ensure_site_ssr_port "$APP_DOMAIN" || { cleanup_failed_release; error "Lỗi khi chuẩn hóa SSR_PORT"; return 1; }
-        sync_inertia_ssr_to_laravel_env "$APP_DOMAIN" || { cleanup_failed_release; error "Lỗi khi sync Inertia SSR env"; return 1; }
+        # ---------------------------------------------------------
+        # Cấu hình Inertia SSR trực tiếp
+        # ---------------------------------------------------------
+        if [ "${USE_SSR:-false}" = "true" ]; then
+            # Cấp port tự động nếu chưa có trong cấu hình site
+            if [ -z "${SSR_PORT:-}" ]; then
+                local last_port
+                last_port=$(grep -rh '^SSR_PORT=' "$SCRIPT_DIR/sites/" 2>/dev/null | sed -E 's/^SSR_PORT="?([0-9]+)"?.*/\1/' | sort -n | tail -1)
+                SSR_PORT=$(( ${last_port:-13713} + 1 ))
+                echo "SSR_PORT=\"${SSR_PORT}\"" >> "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
+                info "Đã cấp SSR_PORT=${SSR_PORT} cho ${APP_DOMAIN}"
+            fi
+            
+            # Ghi cấu hình SSR vào /var/www/.../shared/.env của Laravel
+            if grep -q "^INERTIA_SSR_ENABLED=" "${SHARED_DIR}/.env"; then
+                sed -i "s|^INERTIA_SSR_ENABLED=.*|INERTIA_SSR_ENABLED=true|g" "${SHARED_DIR}/.env"
+            else
+                echo "INERTIA_SSR_ENABLED=true" >> "${SHARED_DIR}/.env"
+            fi
+
+            if grep -q "^VITE_INERTIA_SSR_PORT=" "${SHARED_DIR}/.env"; then
+                sed -i "s|^VITE_INERTIA_SSR_PORT=.*|VITE_INERTIA_SSR_PORT=${SSR_PORT}|g" "${SHARED_DIR}/.env"
+            else
+                echo "VITE_INERTIA_SSR_PORT=${SSR_PORT}" >> "${SHARED_DIR}/.env"
+            fi
+
+            if grep -q "^INERTIA_SSR_URL=" "${SHARED_DIR}/.env"; then
+                sed -i "s|^INERTIA_SSR_URL=.*|INERTIA_SSR_URL=http://127.0.0.1:${SSR_PORT}|g" "${SHARED_DIR}/.env"
+            else
+                echo "INERTIA_SSR_URL=http://127.0.0.1:${SSR_PORT}" >> "${SHARED_DIR}/.env"
+            fi
+        else
+            # Nếu không dùng SSR, đảm bảo tắt nó trong Laravel
+            if grep -q "^INERTIA_SSR_ENABLED=" "${SHARED_DIR}/.env"; then
+                sed -i "s|^INERTIA_SSR_ENABLED=.*|INERTIA_SSR_ENABLED=false|g" "${SHARED_DIR}/.env"
+            else
+                echo "INERTIA_SSR_ENABLED=false" >> "${SHARED_DIR}/.env"
+            fi
+        fi
+        # ---------------------------------------------------------
         
         # Link storage & env
         rm -rf "${NEW_RELEASE}/storage"
@@ -258,7 +296,22 @@ run_deploy() {
         systemctl reload "php${PHP_VERSION}-fpm"
         # Patch Supervisor SSR conf (PATH node-bin) để supervisorctl update áp dụng đúng.
         # Không cần restart riêng — supervisorctl restart toàn group ở bước dưới.
-        patch_site_ssr_supervisor_env "$APP_DOMAIN"
+        # ---------------------------------------------------------
+        # Patch Supervisor SSR conf (PATH node-bin)
+        # ---------------------------------------------------------
+        local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
+        local supervisor_conf="/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
+        local env_line="environment=PATH=\"/var/www/${APP_DOMAIN}/node-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\""
+        
+        if [ -f "$supervisor_conf" ] && grep -q "^\[program:${SAFE_DOMAIN}-ssr\]" "$supervisor_conf"; then
+            if sed -n "/^\[program:${SAFE_DOMAIN}-ssr\]/,/^\[/p" "$supervisor_conf" | grep -q "^environment="; then
+                sed -i "/^\[program:${SAFE_DOMAIN}-ssr\]/,/^\[/ s|^environment=.*|${env_line}|" "$supervisor_conf"
+            else
+                sed -i "/^\[program:${SAFE_DOMAIN}-ssr\]/,/^\[/ s|^stopwaitsecs=.*|&\n${env_line}|" "$supervisor_conf"
+            fi
+            info "Đã cập nhật PATH cho Supervisor SSR (${APP_DOMAIN})"
+        fi
+        # ---------------------------------------------------------
         
         # Supervisor
         local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
