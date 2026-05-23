@@ -314,7 +314,6 @@ run_deploy() {
         # ---------------------------------------------------------
         
         # Supervisor
-        local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
         supervisorctl reread
         supervisorctl update
         sleep 1
