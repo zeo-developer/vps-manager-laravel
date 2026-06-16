@@ -177,40 +177,8 @@ run_deploy() {
     sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
     sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
     
-    # Cấu hình Inertia SSR nếu được kích hoạt
-    if [ "${USE_SSR:-false}" = "true" ]; then
-        if [ -z "${SSR_PORT:-}" ]; then
-            local last_port
-            last_port=$(grep -rh '^SSR_PORT=' "$SCRIPT_DIR/sites/" 2>/dev/null | sed -E 's/^SSR_PORT="?([0-9]+)"?.*/\1/' | sort -n | tail -1)
-            SSR_PORT=$(( ${last_port:-13713} + 1 ))
-            echo "SSR_PORT=\"${SSR_PORT}\"" >> "$SCRIPT_DIR/sites/.env.${APP_DOMAIN}"
-            info "Đã cấp SSR_PORT=${SSR_PORT} cho ${APP_DOMAIN}"
-        fi
-        
-        if grep -q "^INERTIA_SSR_ENABLED=" "${SHARED_DIR}/.env"; then
-            sed -i "s|^INERTIA_SSR_ENABLED=.*|INERTIA_SSR_ENABLED=true|g" "${SHARED_DIR}/.env"
-        else
-            echo "INERTIA_SSR_ENABLED=true" >> "${SHARED_DIR}/.env"
-        fi
-
-        if grep -q "^VITE_INERTIA_SSR_PORT=" "${SHARED_DIR}/.env"; then
-            sed -i "s|^VITE_INERTIA_SSR_PORT=.*|VITE_INERTIA_SSR_PORT=${SSR_PORT}|g" "${SHARED_DIR}/.env"
-        else
-            echo "VITE_INERTIA_SSR_PORT=${SSR_PORT}" >> "${SHARED_DIR}/.env"
-        fi
-
-        if grep -q "^INERTIA_SSR_URL=" "${SHARED_DIR}/.env"; then
-            sed -i "s|^INERTIA_SSR_URL=.*|INERTIA_SSR_URL=http://127.0.0.1:${SSR_PORT}|g" "${SHARED_DIR}/.env"
-        else
-            echo "INERTIA_SSR_URL=http://127.0.0.1:${SSR_PORT}" >> "${SHARED_DIR}/.env"
-        fi
-    else
-        if grep -q "^INERTIA_SSR_ENABLED=" "${SHARED_DIR}/.env"; then
-            sed -i "s|^INERTIA_SSR_ENABLED=.*|INERTIA_SSR_ENABLED=false|g" "${SHARED_DIR}/.env"
-        else
-            echo "INERTIA_SSR_ENABLED=false" >> "${SHARED_DIR}/.env"
-        fi
-    fi
+    # Cấu hình Inertia SSR và JWT giờ đây được quản lý hoàn toàn độc lập thông qua Menu Laravel (manage-laravel).
+    # Không còn ghi đè hoặc tự động cấu hình các biến này trong quá trình deploy nữa.
     
     # Tạo liên kết tượng trưng (symlinks) cho storage và env sang thư mục release mới
     rm -rf "${NEW_RELEASE}/storage"
@@ -231,15 +199,9 @@ run_deploy() {
         fi
     fi
 
-    # Cài đặt và biên dịch các gói NPM (Tùy chọn)
-    local run_npm="n"
+    # Bước 4: Cài đặt và biên dịch các gói NPM tự động
     if [ -f "package.json" ]; then
-        echo -e ""
-        read -p "Sếp có muốn Biên dịch Front-end Assets (npm run build) ngay bây giờ không? (y/n): " run_npm
-    fi
-
-    if [[ "$run_npm" =~ ^[Yy]$ ]]; then
-        info "Cài đặt & Build NPM packages bằng Node.js ${NODE_VERSION:-20}.x..."
+        info "Tự động cài đặt & Build NPM packages bằng Node.js ${NODE_VERSION:-20}.x..."
         sudo -u "$APP_USER" npm${NODE_VERSION:-20} install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
         run_npm_build "$APP_DOMAIN" "$APP_USER" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
     fi
@@ -247,33 +209,22 @@ run_deploy() {
     # Bước 4: Thực thi các câu lệnh Laravel Artisan
     if [ -f "artisan" ]; then
         run_artisan_storage_link "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || warn "⚠️ Không thể tạo storage:link"
-        
-        # Hỏi chạy Database Migration
-        local run_migrate="n"
-        read -p "Sếp có muốn thực thi Database Migrations (migrate) ngay bây giờ không? (y/n): " run_migrate
-        if [[ "$run_migrate" =~ ^[Yy]$ ]]; then
-            run_migration_with_detection "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
-        fi
+        # Tự động chạy Database Migration (Có cơ chế Rollback an toàn)
+        info "Thực thi Database Migrations..."
+        run_migration_with_detection "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
 
-        if [ "$USE_JWT" = "true" ]; then
-            if ! grep -q "^JWT_SECRET=.\+" "${SHARED_DIR}/.env" 2>/dev/null; then
-                run_artisan_jwt_secret "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || true
-            fi
-        fi
-
-        # Hỏi tối ưu hóa cache
-        local run_optimize="n"
-        read -p "Sếp có muốn chạy Tối ưu hóa Cache Laravel (optimize) ngay bây giờ không? (y/n): " run_optimize
-        if [[ "$run_optimize" =~ ^[Yy]$ ]]; then
-            run_optimize_cache "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
-        else
-            run_clear_cache "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE"
-        fi
+        # Tự động Tối ưu hóa Cache mức cao nhất (optimize) cho Production
+        info "Tiến hành Tối ưu hóa Cache hệ thống..."
+        run_optimize_cache "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
     fi
 
-    # Khởi chạy SSR nếu sử dụng Inertia (Tùy thuộc sếp chọn build asset)
-    if [ "$USE_SSR" = "true" ] && [ -f "package.json" ] && [[ "$run_npm" =~ ^[Yy]$ ]]; then
+    # Khởi chạy SSR nếu hệ thống đang bật tính năng này
+    local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
+    local supervisor_conf="/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
+    
+    if [ -f "$supervisor_conf" ] && grep -q "^\[program:${SAFE_DOMAIN}-ssr\]" "$supervisor_conf" && [ -f "package.json" ]; then
         if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
+            info "Tự động Build ứng dụng Inertia SSR..."
             run_npm_build_ssr "$APP_DOMAIN" "$APP_USER" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
         fi
     fi
@@ -288,8 +239,6 @@ run_deploy() {
     systemctl reload "php${PHP_VERSION}-fpm"
     
     # Cấu hình lại Supervisor nếu có sử dụng SSR
-    local SAFE_DOMAIN=$(get_safe_domain "$APP_DOMAIN")
-    local supervisor_conf="/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
     local node_dir
     node_dir=$(resolve_n_node_version_dir "${NODE_VERSION:-20}")
     local env_line="environment=PATH=\"${node_dir}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\""

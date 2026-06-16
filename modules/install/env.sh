@@ -55,6 +55,12 @@ run_env_setup() {
     apt-get install -y nginx
     # Cấu hình ẩn thông tin phiên bản Nginx để bảo mật hơn
     sed -i 's/# server_tokens off;/server_tokens off;/' /etc/nginx/nginx.conf
+    
+    # Thiết lập Catch-all server để chặn truy cập trực tiếp bằng IP gốc
+    if [ -f "$SCRIPT_DIR/configs/nginx-default.conf" ]; then
+        cp "$SCRIPT_DIR/configs/nginx-default.conf" /etc/nginx/sites-available/default
+    fi
+
     systemctl restart nginx
     systemctl enable nginx
 
@@ -89,7 +95,7 @@ run_env_setup() {
     info "Cài đặt Certbot..."
     apt-get install -y certbot python3-certbot-nginx
     
-    # 7. Cài đặt Supervisor để quản lý Laravel Queue / Reverb
+    # 7. Cài đặt Supervisor để quản lý Laravel Queue / SSR
     info "Cài đặt Supervisor..."
     apt-get install -y supervisor
     systemctl enable supervisor

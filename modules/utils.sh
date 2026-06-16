@@ -288,3 +288,46 @@ update_env_var() {
     fi
 }
 
+#-----------------------------------------------------------------------------
+# Hàm:          add_supervisor_program
+# Mô tả:        Thêm một program vào group của website trong cấu hình Supervisor.
+#-----------------------------------------------------------------------------
+add_supervisor_program() {
+    local domain="$1"
+    local program="$2"
+    local safe_domain=$(get_safe_domain "$domain")
+    local conf="/etc/supervisor/conf.d/${safe_domain}.conf"
+
+    if [ ! -f "$conf" ]; then
+        touch "$conf"
+    fi
+
+    if ! grep -q "^\[group:${safe_domain}\]" "$conf"; then
+        echo -e "\n[group:${safe_domain}]\nprograms=${program}" >> "$conf"
+    else
+        # Xóa khỏi programs cũ nếu có để tránh trùng
+        sed -i "s/,${program}//g; s/${program},//g; s/programs=${program}/programs=/g" "$conf"
+        # Nối vào programs
+        sed -i "/^\[group:${safe_domain}\]/,/^programs=/ s/^programs=$/programs=${program}/" "$conf"
+        sed -i "/^\[group:${safe_domain}\]/,/^programs=/ s/^programs=\(.\+\)/programs=\1,${program}/" "$conf"
+    fi
+}
+
+#-----------------------------------------------------------------------------
+# Hàm:          remove_supervisor_program
+# Mô tả:        Xoá một program khỏi group của website trong cấu hình Supervisor.
+#-----------------------------------------------------------------------------
+remove_supervisor_program() {
+    local domain="$1"
+    local program="$2"
+    local safe_domain=$(get_safe_domain "$domain")
+    local conf="/etc/supervisor/conf.d/${safe_domain}.conf"
+
+    if [ -f "$conf" ]; then
+        # Xóa block program
+        sed -i "/^\[program:${program}\]/,/^\s*$/d" "$conf"
+        # Xóa khỏi danh sách group
+        sed -i "s/,${program}//g; s/${program},//g; s/programs=${program}/programs=/g" "$conf"
+    fi
+}
+

@@ -25,6 +25,7 @@ run_add_site() {
     
     if [ -f "$SITE_ENV" ]; then
         error "Lỗi: Cấu hình site '$domain' đã tồn tại. Hủy thao tác."
+        return 1
     fi
 
     cp "$SCRIPT_DIR/.env.site.example" "$SITE_ENV"
@@ -48,7 +49,7 @@ run_add_site() {
     info "Phiên bản PHP đã chọn: ${PHP_VER_SELECTED}"
 
     # 1.1b Chọn phiên bản Node.js riêng cho dự án
-    load_module "runtime.sh" || return 1
+    load_module "runtime/runtime.sh" || return 1
     echo -e "${CYAN}Chọn phiên bản Node.js cho Website:${NC}"
     echo -e "  ${GREEN}1.${NC} Node.js 18.x"
     echo -e "  ${GREEN}2.${NC} Node.js 20.x"
@@ -80,41 +81,7 @@ run_add_site() {
         info "Hoàn tất cài đặt PHP ${PHP_VER_SELECTED}."
     fi
 
-    # 1.2 Cấu hình nâng cao (JWT, SSR)
-    read -p "Dự án có sử dụng JWT không? (y/n, mặc định n): " jwt_choice
-    local use_jwt="false"
-    [[ "$jwt_choice" =~ ^[Yy]$ ]] && use_jwt="true"
-    update_env_var "USE_JWT" "${use_jwt}" "$SITE_ENV"
-
-    read -p "Dự án có sử dụng Inertia SSR không? (y/n, mặc định n): " ssr_choice
-    local use_ssr="false"
-    local ssr_port="13714"
-    if [[ "$ssr_choice" =~ ^[Yy]$ ]]; then
-        use_ssr="true"
-        # Tìm SSR_PORT lớn nhất hiện có và cộng 1
-        local last_port=$(grep -rh "^SSR_PORT=" "$SCRIPT_DIR/sites/" 2>/dev/null | sed -E 's/^SSR_PORT="?([0-9]+)"?.*/\1/' | sort -n | tail -1)
-        if [ ! -z "$last_port" ]; then
-            ssr_port=$((last_port + 1))
-        fi
-    fi
-    update_env_var "USE_SSR" "${use_ssr}" "$SITE_ENV"
-    update_env_var "SSR_PORT" "${ssr_port}" "$SITE_ENV"
-
-    read -p "Dự án có sử dụng Laravel Reverb không? (y/n, mặc định n): " reverb_choice
-    local use_reverb="false"
-    local reverb_port="8080"
-    if [[ "$reverb_choice" =~ ^[Yy]$ ]]; then
-        use_reverb="true"
-        # Tìm port lớn nhất hiện có và cộng 1 (Bắt đầu từ 8080)
-        local last_reverb_port=$(grep -rh "REVERB_PORT=" "$SCRIPT_DIR/sites/" | grep -oP '(?<=")\d+(?=")' | sort -n | tail -1)
-        if [ ! -z "$last_reverb_port" ]; then
-            reverb_port=$((last_reverb_port + 1))
-        fi
-    fi
-    update_env_var "USE_REVERB" "${use_reverb}" "$SITE_ENV"
-    update_env_var "REVERB_PORT" "${reverb_port}" "$SITE_ENV"
-
-    # 1.3 Sinh SSH Key độc lập (Hỗ trợ Multi-Git)
+    # 1.2 Sinh SSH Key độc lập (Hỗ trợ Multi-Git)
     # Di dời Key ra khỏi /root để www-data có thể đọc được
     local ssh_key_dir="/var/www/.vps_keys"
     local app_user=${APP_USER:-"www-data"}
@@ -186,65 +153,13 @@ run_add_site() {
     generate_nginx_config "$domain" "$domain" "$php_ver"
     systemctl reload nginx
 
-    # 5. Cấu hình Supervisor Group (Chờ Deploy để kích hoạt)
-    info "Cấu hình Supervisor Group: [ ${SAFE_DOMAIN} ]"
+    # 5. Khởi tạo file Supervisor rỗng (Chờ Bật các dịch vụ qua Menu Laravel)
+    info "Khởi tạo file Supervisor rỗng: [ ${SAFE_DOMAIN} ]"
     local supervisor_conf="/etc/supervisor/conf.d/${SAFE_DOMAIN}.conf"
     
-    local node_dir=""
-    if [ "$use_ssr" = "true" ]; then
-        node_dir=$(resolve_n_node_version_dir "${NODE_VER_SELECTED}")
-    fi
-
-    local supervisor_programs="${SAFE_DOMAIN}-worker"
-    [ "$use_ssr" = "true" ] && supervisor_programs="${supervisor_programs},${SAFE_DOMAIN}-ssr"
-    [ "$use_reverb" = "true" ] && supervisor_programs="${supervisor_programs},${SAFE_DOMAIN}-reverb"
-
     cat <<EOF > "$supervisor_conf"
-[group:${SAFE_DOMAIN}]
-programs=${supervisor_programs}
-
-[program:${SAFE_DOMAIN}-worker]
-process_name=%(program_name)s_%(process_num)02d
-command=php${php_ver} /var/www/${domain}/current/artisan queue:work --sleep=3 --tries=3 --max-time=3600
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-user=${app_user}
-numprocs=2
-redirect_stderr=true
-stdout_logfile=/var/www/${domain}/shared/storage/logs/worker.log
-stopwaitsecs=3600
-
-$( [ "$use_ssr" = "true" ] && cat <<SSR_EOF
-[program:${SAFE_DOMAIN}-ssr]
-process_name=%(program_name)s
-command=php${php_ver} /var/www/${domain}/current/artisan inertia:start-ssr
-autostart=true
-autorestart=true
-user=${app_user}
-redirect_stderr=true
-stdout_logfile=/var/www/${domain}/shared/storage/logs/ssr.log
-stopwaitsecs=3600
-environment=PATH="${node_dir}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-SSR_EOF
-)
-
-$( [ "$use_reverb" = "true" ] && cat <<REVERB_EOF
-[program:${SAFE_DOMAIN}-reverb]
-process_name=%(program_name)s
-command=php${php_ver} /var/www/${domain}/current/artisan reverb:start --host="0.0.0.0" --port=${reverb_port}
-autostart=true
-autorestart=true
-stopasgroup=true
-killasgroup=true
-user=${app_user}
-numprocs=1
-redirect_stderr=true
-stdout_logfile=/var/www/${domain}/shared/storage/logs/reverb.log
-stopwaitsecs=3600
-REVERB_EOF
-)
+; File cấu hình Supervisor cho domain: ${domain}
+; Sử dụng Menu Quản lý Laravel (./vps.sh manage-laravel) để bật tắt các dịch vụ (SSR, Queue Worker)
 EOF
     chmod 644 "$supervisor_conf"
 
@@ -254,9 +169,8 @@ EOF
     info " Web Root     : $target_dir"
     info " DB Name/User : $raw_db_name"
     info " DB Password  : $raw_db_pass"
-    [ "$use_ssr" = "true" ] && info " SSR Port     : $ssr_port"
+    info " DB Password  : $raw_db_pass"
     info " Node.js      : ${NODE_VER_SELECTED}.x"
-    [ "$use_reverb" = "true" ] && info " Reverb Port  : $reverb_port"
     info "-----------------------------------------------------------------"
     info " SSH Public Key (Thêm vào Deploy Keys trên GitHub):"
     echo -e "${YELLOW}$(cat "${ssh_key_path}.pub")${NC}"
