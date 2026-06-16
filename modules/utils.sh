@@ -10,31 +10,71 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m' # Không màu
 
+#-----------------------------------------------------------------------------
+# Hàm:          info
+# Mô tả:        Hiển thị thông báo thông tin (màu xanh lá).
+# Biến toàn cục: GREEN, NC
+# Tham số:      $1 - Nội dung thông báo
+# Trả về:       Không có
+#-----------------------------------------------------------------------------
 info() { echo -e "${GREEN}[INFO] $1${NC}"; }
+
+#-----------------------------------------------------------------------------
+# Hàm:          warn
+# Mô tả:        Hiển thị thông báo cảnh báo (màu vàng).
+# Biến toàn cục: YELLOW, NC
+# Tham số:      $1 - Nội dung cảnh báo
+# Trả về:       Không có
+#-----------------------------------------------------------------------------
 warn() { echo -e "${YELLOW}[WARN] $1${NC}"; }
+
+#-----------------------------------------------------------------------------
+# Hàm:          error
+# Mô tả:        Hiển thị thông báo lỗi (màu đỏ) và thoát hoặc trả về mã lỗi.
+# Biến toàn cục: RED, NC
+# Tham số:      $1 - Nội dung lỗi
+# Trả về:       1 (hoặc thoát hẳn script nếu chạy độc lập)
+#-----------------------------------------------------------------------------
 error() {
     echo -e "${RED}[ERROR] $1${NC}"
     return 1 2>/dev/null || exit 1
 }
 
-
-# Lọc bỏ ký tự nguy hiểm đầu vào
+#-----------------------------------------------------------------------------
+# Hàm:          sanitize_input
+# Mô tả:        Lọc bỏ các ký tự nguy hiểm từ chuỗi đầu vào.
+# Biến toàn cục: Không có
+# Tham số:      $1 - Chuỗi cần lọc
+# Trả về:       Chuỗi đã được làm sạch (chỉ giữ lại a-zA-Z0-9, chấm, gạch ngang/dưới)
+#-----------------------------------------------------------------------------
 sanitize_input() {
     local input="$1"
     # Chỉ cho phép chữ cái, chữ số, dấu chấm, dấu gạch ngang, gạch dưới
     echo "${input}" | sed 's/[^a-zA-Z0-9._-]//g'
 }
 
-# Tạo định danh an toàn (Safe Domain) cho các dịch vụ hệ thống (Supervisor, DB...)
+#-----------------------------------------------------------------------------
+# Hàm:          get_safe_domain
+# Mô tả:        Tạo định danh an toàn từ tên miền để dùng cho các dịch vụ (Supervisor, DB...).
+# Biến toàn cục: Không có
+# Tham số:      $1 - Tên miền (ví dụ: demo.com)
+# Trả về:       Chuỗi định danh an toàn (ví dụ: demo_com)
+#-----------------------------------------------------------------------------
 get_safe_domain() {
     local domain="$1"
     # Chuyển site.com -> site_com, my-site.com -> my_site_com
     echo "$domain" | sed 's/[^a-zA-Z0-9]/_/g'
 }
 
-# Thắt chặt quyền file cấu hình nhạy cảm (.env)
+#-----------------------------------------------------------------------------
+# Hàm:          harden_permissions
+# Mô tả:        Thắt chặt quyền bảo mật cho tệp tin cấu hình nhạy cảm (.env).
+# Biến toàn cục: Không có
+# Tham số:      $1 - Đường dẫn tệp tin cấu hình cần thắt chặt (chuyển về chmod 600)
+# Trả về:       Không có
+#-----------------------------------------------------------------------------
 harden_permissions() {
     local target="$1"
     if [ -f "$target" ]; then
@@ -42,8 +82,14 @@ harden_permissions() {
     fi
 }
 
-# Kiểm tra file .env không chứa lệnh shell nguy hiểm trước khi source
-# Usage: validate_env_file "/path/to/.env" && source "/path/to/.env"
+#-----------------------------------------------------------------------------
+# Hàm:          validate_env_file
+# Mô tả:        Kiểm tra file cấu hình .env, chặn các mã độc hại trước khi nạp (source).
+# Biến toàn cục: Không có
+# Tham số:      $1 - Đường dẫn file cấu hình .env cần nạp
+# Trả về:       0 nếu hợp lệ, 1 nếu không hợp lệ
+# Sử dụng:      validate_env_file "/path/to/.env" && source "/path/to/.env"
+#-----------------------------------------------------------------------------
 validate_env_file() {
     local file="$1"
     if [ ! -f "$file" ]; then
@@ -51,7 +97,7 @@ validate_env_file() {
         return 1
     fi
     # Từ chối nếu có cú pháp shell nguy hiểm ngoài comment và assignment
-    # Cho phép: VAR=value, VAR="value", #comment, dòng trống
+    # Chỉ cho phép: VAR=value, VAR="value", #comment, dòng trống
     if grep -qvE '^\s*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*=.*$' "$file" 2>/dev/null; then
         error "File '$file' chứa cú pháp không hợp lệ (chỉ cho phép KEY=VALUE hoặc comment)."
         return 1
@@ -64,8 +110,14 @@ validate_env_file() {
     return 0
 }
 
-# Wrapper thực thi lệnh MySQL an toàn giấu mật khẩu
-# Usage: run_mysql_secure "QUERY"
+#-----------------------------------------------------------------------------
+# Hàm:          run_mysql_secure
+# Mô tả:        Wrapper thực thi lệnh MySQL an toàn giấu mật khẩu.
+# Biến toàn cục: DB_ROOT_PASSWORD, SCRIPT_DIR
+# Tham số:      $1 - Câu lệnh truy vấn SQL cần chạy
+# Trả về:       Mã exit code của lệnh mysql thực thi
+# Sử dụng:      run_mysql_secure "QUERY"
+#-----------------------------------------------------------------------------
 run_mysql_secure() {
     local query="$1"
 
@@ -98,11 +150,17 @@ run_mysql_secure() {
     return $_exit_code
 }
 
-# -------------------------------------------------------------------------
+# =========================================================================
 # CÁC HÀM QUẢN LÝ DANH SÁCH SITE
-# -------------------------------------------------------------------------
+# =========================================================================
 
-# Trích xuất danh sách domain từ các file .env trong thư mục sites/
+#-----------------------------------------------------------------------------
+# Hàm:          get_site_list
+# Mô tả:        Trích xuất danh sách domain từ các file .env trong thư mục sites/.
+# Biến toàn cục: SCRIPT_DIR
+# Tham số:      Không có
+# Trả về:       Danh sách các tên miền
+#-----------------------------------------------------------------------------
 get_site_list() {
     local site_dir="${SCRIPT_DIR}/sites"
     if [ ! -d "$site_dir" ]; then
@@ -112,7 +170,13 @@ get_site_list() {
     ls "${site_dir}"/.env.* 2>/dev/null | sed "s|${site_dir}/.env.||g"
 }
 
-# Hiển thị thực đơn chọn Website và trả về domain được chọn
+#-----------------------------------------------------------------------------
+# Hàm:          select_site_menu
+# Mô tả:        Hiển thị danh sách chọn Website và trả về domain được chọn.
+# Biến toàn cục: CYAN, YELLOW, GREEN, RED, NC
+# Tham số:      $1 - Tiêu đề tiêu đề menu (tùy chọn)
+# Trả về:       Chuỗi tên miền được chọn trên stdout; mã exit 0 nếu chọn đúng, 1 nếu hủy
+#-----------------------------------------------------------------------------
 select_site_menu() {
     local header="$1"
     local sites=($(get_site_list))
@@ -152,3 +216,58 @@ select_site_menu() {
         warn "Lựa chọn không hợp lệ. Vui lòng chọn lại!" >&2
     done
 }
+
+#-----------------------------------------------------------------------------
+# Hàm:          require_root
+# Mô tả:        Bắt buộc script phải chạy dưới quyền root (sudo).
+# Biến toàn cục: EUID
+# Tham số:      Không có
+# Trả về:       Không có (thoát script với lỗi nếu không phải root)
+#-----------------------------------------------------------------------------
+require_root() {
+    if [ "$EUID" -ne 0 ]; then
+        error "Quyền root (sudo) là bắt buộc. Vui lòng chạy lại với sudo."
+    fi
+}
+
+#-----------------------------------------------------------------------------
+# Hàm:          load_module
+# Mô tả:        Nạp (source) một module an toàn từ thư mục con modules.
+# Biến toàn cục: SCRIPT_DIR
+# Tham số:      $1 - Tên file module (ví dụ: site.sh)
+# Trả về:       0 nếu thành công, 1 nếu thất bại
+#-----------------------------------------------------------------------------
+load_module() {
+    local module_name="$1"
+    local module_path="$SCRIPT_DIR/modules/$module_name"
+    if [ -f "$module_path" ]; then
+        # shellcheck source=/dev/null
+        source "$module_path"
+    else
+        error "Không tìm thấy module tại: $module_path"
+        return 1
+    fi
+}
+
+#-----------------------------------------------------------------------------
+# Hàm:          update_env_var
+# Mô tả:        Cập nhật hoặc thêm mới một biến cấu hình trong file env.
+# Biến toàn cục: Không có
+# Tham số:      $1 - Tên biến cấu hình (Key)
+#               $2 - Giá trị mới (Value)
+#               $3 - Đường dẫn file cấu hình
+# Trả về:       Không có
+#-----------------------------------------------------------------------------
+update_env_var() {
+    local key="$1"
+    local val="$2"
+    local file="$3"
+    
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        # Sử dụng ký tự | làm phân cách để tránh lỗi khi giá trị chứa dấu /
+        sed -i "s|^${key}=.*|${key}=\"${val}\"|" "$file"
+    else
+        echo "${key}=\"${val}\"" >> "$file"
+    fi
+}
+

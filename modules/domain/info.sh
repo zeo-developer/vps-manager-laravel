@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# modules/info.sh
+# modules/domain/info.sh
 # Xem thông tin cấu hình chi tiết của 1 Website
 
+#-----------------------------------------------------------------------------
+# Hàm:          run_site_info
+# Mô tả:        Lấy thông tin và trạng thái (SSL, Nginx, Queue, SSR, Node) của site.
+# Biến toàn cục: SCRIPT_DIR, CYAN, GREEN, RED, BLUE, YELLOW, NC
+# Tham số:      $1 - Tên miền cần xem
+# Trả về:       0 nếu thành công, 1 nếu lỗi
+#-----------------------------------------------------------------------------
 run_site_info() {
     local domain="$1"
     local SITE_ENV="$SCRIPT_DIR/sites/.env.${domain}"
@@ -42,9 +49,11 @@ run_site_info() {
     fi
 
     local node_status="${NODE_VERSION:-20}.x"
-    local node_bin="/var/www/${domain}/node-bin/node"
-    if [ -x "$node_bin" ]; then
-        node_status="$($node_bin -v 2>/dev/null)"
+    load_module "runtime.sh" || return 1
+    local node_dir
+    node_dir=$(resolve_n_node_version_dir "${NODE_VERSION:-20}")
+    if [ -n "$node_dir" ] && [ -x "${node_dir}/bin/node" ]; then
+        node_status=$("${node_dir}/bin/node" -v 2>/dev/null)
     fi
 
     # Lấy SSH Public Key

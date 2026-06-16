@@ -17,7 +17,7 @@ Dự án tập trung vào 3 tiêu chí cốt lõi: **Hiệu năng (Performance)*
 ### 🏗️ Quản Trị Đa Dự Án (Multi-Site & Isolation)
 *   **SSH Isolation**: Định danh độc lập phân tách SSH Key cho từng website. Cơ chế này đảm bảo máy chủ kết nối an toàn với nhiều Repository lưu trữ khác nhau mà không phát sinh xung đột định danh.
 *   **PHP Versioning**: Hỗ trợ chỉ định và chuyển đổi phiên bản PHP (8.1, 8.2, 8.3, 8.4) phân lập cho từng tên miền (domain) cụ thể thông qua cấu hình Nginx Handler nội bộ.
-*   **Node.js Versioning**: Mỗi website có `NODE_VERSION` riêng và wrapper `node/npm/npx` riêng tại `/var/www/<domain>/node-bin`, đảm bảo build Vite/Inertia SSR chạy đúng runtime theo site.
+*   **Node.js Versioning**: Mỗi website có `NODE_VERSION` riêng được liên kết với các wrapper toàn cục `node${version}`, `npm${version}`, `npx${version}` tại `/usr/local/bin/`. Supervisor SSR sẽ nạp trực tiếp PATH trỏ tới thư mục bin thực tế tương ứng của `n`, đảm bảo build Vite/Inertia SSR chạy đúng runtime cô lập theo site và loại bỏ rác wrapper cục bộ.
 *   **Database Isolation**: Định tuyến cơ sở dữ liệu và người dùng riêng biệt trên hệ sinh thái MariaDB cho mỗi dự án, tuân thủ nguyên tắc an toàn dữ liệu và quyền truy cập.
 
 ### 🌐 Domain Identity & Routing
@@ -46,25 +46,45 @@ Dự án tập trung vào 3 tiêu chí cốt lõi: **Hiệu năng (Performance)*
 ├── .env.global.example     # Tổ hợp cấu hình vận hành nội bộ (Telegram/DB Root)
 ├── .env.site.example       # Mẫu thiết lập tham số cho từng cấu hình Domain
 ├── modules/                # Tập hợp thư viện Core Bash Scripts điều khiển riêng
-│   ├── site.sh             # Logic khởi tạo Root Web Folder, Database, SSH Key
-│   ├── deploy.sh           # Thuật toán CI/CD: Release Build, Symlink và Rollback
-│   ├── info.sh             # Report cấu trúc Status cho một dịch vụ Website
-│   ├── ssl.sh              # Giao thức Certbot cấu trúc TLS/SSL bảo mật HTTPs
-│   ├── php-version.sh      # Xử lý Engine cấu hình Handler PHP động trên khối Nginx
-│   ├── manage-db.sh        # Phân quyền IAM (IP Permission) truy cập kết nối Remote Database
-│   ├── logs.sh             # Output Stream Logging chuẩn Systemd & Laravel Laravel Logging
-│   ├── queue.sh            # Cấu hình biên dịch Background Worker sử dụng Daemon Supervisor
-│   ├── rename-domain.sh    # Đồng bộ hóa thay đổi Namespace ứng dụng Domain Base
-│   ├── alias.sh            # Gắn kết cấu trúc bản sao tên miền trỏ về Domain Parent
+│   ├── deploy.sh           # Loader điều phối triển khai và khôi phục website
+│   ├── deploy/             # Thư mục con chứa các sub-module deploy/rollback
+│   │   ├── deploy.sh       # Thuật toán CI/CD Zero-Downtime Deploy
+│   │   └── rollback.sh     # Thuật toán Rollback phiên bản cũ
+│   ├── domain.sh           # Menu phụ điều phối Quản lý Website
+│   ├── domain/             # Thư mục con chứa các sub-module domain
+│   │   ├── add.sh          # Tạo mới website (Nginx, DB, SSL, SSH Key)
+│   │   ├── alias.sh        # Quản lý ánh xạ tên miền phụ (Domain Alias)
+│   │   ├── info.sh         # Xem thông tin chi tiết trạng thái Website
+│   │   ├── remove.sh       # Xóa website và giải phóng tài nguyên
+│   │   └── rename.sh       # Thay đổi tên miền của website
+│   ├── install/            # Thư mục con chứa các phase cài đặt của install.sh
+│   │   ├── db.sh           # Thiết lập MariaDB Server, backup, logrotate
+│   │   ├── env.sh          # Cài đặt Web Stack runtime (Nginx, PHP, Node.js...)
+│   │   ├── finalize.sh     # Tạo symlink vps toàn cục để gọi qua CLI
+│   │   ├── init.sh         # Khởi tạo môi trường, kiểm tra root, sinh pass MariaDB
+│   │   ├── menu.sh         # Hiển thị menu giới thiệu tiến trình cài đặt
+│   │   └── system.sh       # Cấu hình OS, SSH, Firewall, Fail2Ban
+│   ├── laravel.sh          # Loader điều phối quản lý dự án Laravel
+│   ├── laravel/            # Thư mục con chứa các sub-module quản lý Laravel
+│   │   ├── artisan.sh      # Thực thi lệnh Artisan (migrate, rollback, key, jwt, link)
+│   │   ├── build.sh        # Biên dịch asset front-end (npm run build/build:ssr)
+│   │   ├── cache.sh        # Dọn dẹp cache và lưu cấu hình tối ưu hiệu năng
+│   │   ├── queue.sh        # Cấu hình Custom Queue Worker cho Laravel
+│   │   ├── scheduler.sh    # Bật/tắt Laravel Scheduler
+│   │   └── ssr.sh          # Bật/tắt và quản lý Supervisor Inertia SSR
+│   ├── logs.sh             # Xem Logs trực tiếp (Laravel, Nginx Access/Error)
+│   ├── manage-db.sh        # Loader quản lý CSDL (password, remote access)
+│   ├── db/                 # Thư mục con chứa sub-module quản lý Database
+│   │   ├── password.sh     # Đổi mật khẩu database của website
+│   │   └── remote.sh       # Quản lý quyền truy cập MySQL từ xa qua IP
+│   ├── runtime.sh          # Loader quản lý runtime PHP và Node.js
+│   ├── runtime/            # Thư mục con chứa sub-module runtime
+│   │   ├── node.sh         # Quản lý Node.js và wrapper toàn cục node${version}
+│   │   └── php.sh          # Quản lý PHP-FPM socket và php wrapper cục bộ
+│   ├── ssl.sh              # Giao thức Certbot cấu trúc TLS/SSL bảo mật HTTPS
 │   ├── swap.sh             # Thiết đặt phân bổ hệ điều hành tạo ảo Volume SWAP
-│   ├── node-version.sh     # Quản lý cài đặt và chuyển đổi phiên bản Node.js Runtime
-│   ├── monitor.sh          # Payload Alert Engine bắn thông cáo Event sang Telegram API
-│   ├── remove-site.sh      # Thực thi quy trình hủy phân vùng độc lập để giải phóng tài nguyên
-│   ├── update.sh           # Xác minh các Dependencies và nâng cấp gói Repository APT 
-│   ├── db-setup.sh         # Module Script định nghĩa cấu hình và tạo MariaDB User Privilege
-│   ├── env-setup.sh        # Quy trình Render ra các chuẩn Template File .env Environment
-│   ├── system-setup.sh     # Dependency Check phục vụ module cài đặt Install base Ubuntu 
-│   └── utils.sh            # Cấu trúc Functions Helper dùng lại các Validation Color & MariaDB Auth Wrapper
+│   ├── update.sh           # Cập nhật hệ thống OS, dọn dẹp RAM Cache và Journal Log
+│   └── utils.sh            # Các hàm helper kiểm tra, xuất dữ liệu và MariaDB Auth
 ├── configs/                # Thành phần nguyên mẫu (Templates Configurations Structure)
 │   ├── nginx-template.conf # Khối Nginx Server Block chuẩn cấu hình hiệu năng cao Framework Route
 │   ├── supervisor-queue.conf # Thiết lập Template cho Backend Queue Manager
@@ -118,26 +138,34 @@ sudo vps
 
 ## 🖥️ 6. Chi Tiết Tính Năng Cốt Lõi (CLI Menu Reference)
 
-Bảng điều khiển (Menu) của hệ thống bao gồm **16 chức năng** giúp đơn giản hóa các thao tác quản trị phức tạp:
+Bảng điều khiển (Menu Dashboard) của hệ thống bao gồm **9 nhóm chức năng chính** được thiết kế tinh gọn và dễ sử dụng:
 
-1.  **Thêm Website (Add Site)**: Tự động khởi tạo toàn bộ không gian cho website mới: Tạo thư mục chứa code, cài đặt Database phân quyền riêng, tạo thư mục mã hóa SSH Key, và chuẩn bị cấu hình Nginx/Supervisor.
-2.  **Quản Lý SSL (SSL Manager)**: Cài đặt và tự động gia hạn chứng chỉ bảo mật HTTPS (Let's Encrypt) chuẩn hóa vào cấu hình Nginx.
-3.  **Triển Khai Mã Nguồn (Deploy)**: Tự động tải code mới nhất từ Git và cài đặt ứng dụng. Hỗ trợ 2 chế độ:
-    *   **Zero-Downtime:** Tải code vào một thư mục tạm, cài đặt đầy đủ quy trình rồi mới chuyển liên kết vào website đang thực chạy. Đảm bảo website không bao giờ bị lỗi (sập) trong lúc cập nhật.
-    *   **Quick Deploy:** Kéo thả code đè trực tiếp lên phiên bản hiện tại, tốc độ nhanh (phù hợp cho các dự án cần fix lỗi nóng cục bộ).
-4.  **Khôi Phục Phiên Bản (Rollback)**: Cứu hộ khẩn cấp. Khôi phục trạng thái bộ code ngay lập tức (và tự động lùi cấu trúc Database) về lại phiên bản chạy ổn định trước đó nếu lỗi mã nguồn khi Deploy.
-5.  **Xóa Website (Remove Site)**: Dọn dẹp sạch sẽ thư mục code dự án, Database, User MySQL và Nginx Config của website không còn sử dụng để tiết kiệm tài nguyên.
-6.  **Xem Thông Tin Website (Site Info)**: Hiển thị bảng tóm tắt thông số dự án (IP Máy chủ, Phiên bản PHP đang dùng, Port Node.js) và xuất chuỗi *SSH Public Key* để khai báo lên tính năng Deploy Keys của GitHub/GitLab.
-7.  **Đổi Phiên Bản PHP (Change PHP Version)**: Chuyển đổi linh hoạt hệ thống Website qua lại giữa các phiên bản PHP (8.1 -> 8.4) thao tác riêng rẽ, không làm chập chờn các site khác.
-8.  **Quản Lý Database (Manage DB)**: Mở quyền kết nối Remote Database an toàn thông qua cấu hình chặn IP. Cho phép bạn hoặc nhân sự dùng DataGrip/Navicat để kết nối trích xuất CSDL an toàn nhất.
-9.  **Giám Sát Log (View Logs)**: Tính năng soi lỗi hệ thống theo thời gian thực (Real-time tracking). Hiển thị song song Log yêu cầu bị lỗi từ Nginx hoặc Log thông báo cấu trúc trong thư mục Laravel.
-10. **Thêm Hàng Đợi (Add Queue Worker)**: Thiết lập các tiến trình chạy ngầm qua cấu hình Supervisor (Gửi Email, Export file...) để vận hành Job của Laravel trơn tru mà không lo Script bị kill giữa chừng.
-11. **Cập Nhật OS (OS Update)**: Script tự động truy vấn cấu trúc Ubuntu và cài đặt các bản vá lỗi bảo mật Base Dependencies an toàn cho Server.
-12. **Cấu Hình Giám Sát (Monitor Setup)**: Kết nối Token Telegram Bot. Giúp nhóm của bạn nhận thông báo trực tiếp qua Chat tự động về quy trình trạng thái khi dự án của bạn Build/Deploy hoàn tất.
-13. **Đổi Tên Miền (Rename Domain)**: Giúp dự án "thay tên đổi họ" cấp tốc mà vẫn an toàn. Tool sẽ tự động xử lý đổi tên Thư mục, CSDL, cấu trúc Symlink User cho tên miền hoàn toàn mới.
-14. **Quản Lý Domain Ánh Xạ (Domain Alias)**: Cho phép kết nối nhiều cụm tên miền mở rộng (.vn, .net) vào hoạt động chung một Core Source gốc `.com` bằng Nginx Server name ảo. Và bạn có quyền Thêm hoặc Gỡ alias dễ dàng.
-15. **Quản Lý Bộ Nhớ Ảo (SWAP Memory)**: Tính năng cứu nguy khi VPS có dung lượng cấu hình thụ động thấp. Nó cho phép bạn trích tạo thêm ổ cứng chuyển thành lượng Cache SWAP giả lập RAM, giải quyết triệt để lỗi giật "Out Of Memory" khi đang chạy lệnh cài đặt NPM (Node / Vite / Npm install) nặng.
-16. **Quản Lý Version Node.js**: Cài đặt và gán phiên bản Node.js riêng cho từng website (18.x, 20.x, 22.x, 24.x). Deploy/NPM build/SSR sẽ dùng wrapper `/var/www/<domain>/node-bin` theo `NODE_VERSION` của site.
+1.  **Quản lý Website (Domain, Alias)**: Menu phụ tập hợp toàn bộ các tính năng tương tác với Website:
+    *   **Thêm Website:** Tự động tạo thư mục, cấu hình Nginx/Supervisor, sinh SSH Deploy Keys và tạo Database riêng.
+    *   **Xem thông tin Website:** Hiển thị chi tiết trạng thái SSL, PHP, Node.js, CSDL và lấy khóa SSH Public Key.
+    *   **Thay đổi tên miền:** Đổi tên thư mục, CSDL và cấu hình Virtual Host Nginx sang tên miền mới.
+    *   **Quản lý tên miền ánh xạ (Domain Alias):** Liên kết nhiều tên miền phụ hoặc tên miền song song trỏ vào chung một mã nguồn.
+    *   **Xóa Website:** Giải phóng tài nguyên hệ thống bằng cách xóa sạch code, CSDL, cấu hình Nginx và Supervisor.
+2.  **Quản lý SSL Let's Encrypt**: Cài đặt và tự động gia hạn chứng chỉ HTTPS miễn phí, đồng bộ thiết lập an toàn vào Nginx.
+3.  **Triển khai & Khôi phục (Deploy/Rollback)**: Quản lý vòng đời dự án:
+    *   **Deploy (Zero-Downtime):** Tải mã nguồn mới nhất từ Git, chạy Composer/NPM install, biên dịch Asset và hoán đổi symlink an toàn.
+    *   **Rollback:** Khôi phục nhanh về bản phát hành ổn định trước đó (và tự động lùi cấu trúc CSDL nếu cần).
+4.  **Quản lý phiên bản PHP & Node.js (Runtime)**: Cấu hình môi trường thực thi:
+    *   **PHP Version:** Chuyển đổi linh hoạt giữa PHP 8.1 - 8.4 và chạy trực tiếp phiên bản tương ứng toàn cục.
+    *   **Node.js Version:** Gán phiên bản Node.js (18 - 24) và tự động tạo các symlink/wrapper toàn cục (`node${version}`, `npm${version}`) để build asset cô lập.
+5.  **Quản lý Cơ sở dữ liệu**: Đổi mật khẩu CSDL của website (tự động cập nhật file `.env` dự án) và cho phép/ngăn chặn kết nối MySQL từ xa bằng cách giới hạn quyền theo IP trên tường lửa UFW.
+6.  **Quản lý Laravel (Artisan, SSR, Cache, Scheduler)**: Các công cụ dành riêng cho dự án Laravel:
+    *   Chạy Database Migration & Rollback.
+    *   Bật/Tắt & Khởi động lại dịch vụ Inertia Server-Side Rendering (SSR) quản lý bởi Supervisor daemon.
+    *   Tạo Application Key (`key:generate`) & sinh khóa JWT secret.
+    *   Tạo liên kết dữ liệu (`storage:link`).
+    *   Dọn dẹp cache hệ thống & Lưu cache cấu hình tối ưu hiệu năng (`config:cache`, `route:cache`, `view:cache`).
+    *   Biên dịch Asset front-end (`npm run build` / `npm run build:ssr`) thủ công.
+    *   Bật/Tắt Laravel Scheduler (`artisan schedule:run`) tự động hàng phút cho website.
+    *   Thêm Custom Queue Worker (Laravel) chạy ngầm qua Supervisor.
+7.  **Xem Logs (Realtime)**: Theo dõi trực quan lỗi hệ thống theo thời gian thực (Laravel logs, Nginx access/error logs, hoặc xem kết hợp).
+8.  **Cập nhật máy chủ (OS Update)**: Quét và cập nhật các bản vá lỗi bảo mật, đồng thời giải phóng RAM PageCache và dọn dẹp journald log dung lượng lớn để giải phóng đĩa cứng.
+9.  **Quản lý SWAP Memory**: Cứu nguy cho VPS cấu hình thấp bằng cách cấp phát tức thời ổ cứng ảo làm bộ nhớ đệm RAM ảo (SWAP), ngăn chặn lỗi Out of Memory (OOM) khi compile asset.
 
 ---
 
@@ -157,8 +185,8 @@ Bộ trạng thái môi trường cốt lõi quản trị định danh mức cao
 
 ## 💡 8. Phụ Lục Vận Hành Kỹ Thuật (Operational Glossary Checklists)
 
-*   **Bộ Định Tuyến Dịch Vụ Data Từ Xa (Remote Setup Scheme)**: Hệ thống Firewall không thiết lập All-Access Default đối với Data (Tránh lỗi 3306 Phishing Attack). Để công cụ trực quan (DataGrip / DBeaver) làm việc từ Local Computer, bắt buộc yêu cầu Căn cước định dạng cấu hình tại Menu 8 cung cấp Static IP từ Host làm việc.
-*   **Tràn Vùng Nhớ Đệm Vật Lý (Build RAM Crisis Handling)**: Quy Trình Dependency Composer Hoặc Build Asset Compilation (NPM packages Install) khi chạy tạo cực lượng IO Resource tải Cache RAM. Khuyến nghị chủ động Setup SWAP (Menu số 16) phân hiệu lớn chuẩn trước thời điểm làm quy trình triển khai phiên bản quy cho Server nhỏ <= 2GB Memory.
+*   **Bộ Định Tuyến Dịch Vụ Data Từ Xa (Remote Setup Scheme)**: Hệ thống Firewall không thiết lập All-Access Default đối với Data (Tránh lỗi 3306 Phishing Attack). Để công cụ trực quan (DataGrip / DBeaver) làm việc từ Local Computer, bắt buộc yêu cầu cấu hình tại Menu 5 cung cấp Static IP từ Host làm việc.
+*   **Tràn Vùng Nhớ Đệm Vật Lý (Build RAM Crisis Handling)**: Quy Trình Dependency Composer Hoặc Build Asset Compilation (NPM packages Install) khi chạy tạo cực lượng IO Resource tải Cache RAM. Khuyến nghị chủ động Setup SWAP (Menu số 9) phân hiệu lớn chuẩn trước thời điểm làm quy trình triển khai phiên bản quy cho Server nhỏ <= 2GB Memory.
 
 ---
 

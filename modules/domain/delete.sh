@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# modules/remove-site.sh
-# Xóa vĩnh viễn cấu hình, cơ sở dữ liệu và source code của Website
+# modules/domain/delete.sh
+# Xóa vĩnh viễn cấu hình, cơ sở dữ liệu và mã nguồn của Website
 
+#-----------------------------------------------------------------------------
+# Hàm:          run_remove_site
+# Mô tả:        Gỡ bỏ hoàn toàn database, Nginx, Supervisor, Cronjob, source code và SSH Keys của site.
+# Biến toàn cục: SCRIPT_DIR, APP_USER
+# Tham số:      $1 - Tên miền cần xóa
+# Trả về:       Không có
+#-----------------------------------------------------------------------------
 run_remove_site() {
     local domain="$1"
 
@@ -22,10 +29,9 @@ run_remove_site() {
         return
     fi
 
-
     info "Bắt đầu thủ tục HUỶ DIỆT dự án $domain ..."
 
-    # 1. Xoá Database
+    # 1. Xoá Database MySQL
     if [ ! -z "$DB_NAME" ] && [ ! -z "$DB_USER" ]; then
         info "Xoá Database: $DB_NAME ..."
         run_mysql_secure "DROP DATABASE IF EXISTS \`${DB_NAME}\`;"

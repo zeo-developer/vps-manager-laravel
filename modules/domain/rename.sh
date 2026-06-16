@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-# modules/rename-domain.sh
+# modules/domain/rename.sh
 # Đổi tên miền chính của một Website (giữ nguyên Database, SSH Key được rename)
 
+#-----------------------------------------------------------------------------
+# Hàm:          run_rename_domain
+# Mô tả:        Đổi tên miền chính của Website: rename thư mục web, cập nhật cấu hình Nginx/Supervisor/Cron,
+#               cập nhật file env và dọn dẹp SSL cũ.
+# Biến toàn cục: SCRIPT_DIR, APP_USER, CYAN, BLUE, YELLOW, NC
+# Tham số:      $1 - Tên miền cũ
+#               $2 - Tên miền mới
+# Trả về:       0 nếu thành công, 1 nếu lỗi
+#-----------------------------------------------------------------------------
 run_rename_domain() {
     local old_domain="$1"
     local new_domain="$2"
@@ -9,7 +18,7 @@ run_rename_domain() {
     local OLD_ENV="$SCRIPT_DIR/sites/.env.${old_domain}"
     local NEW_ENV="$SCRIPT_DIR/sites/.env.${new_domain}"
 
-    # ── 1. Validate ──────────────────────────────────────────────────────────
+    # ── 1. Kiểm tra tính hợp lệ (Validate) ──────────────────────────────────
     if [ ! -f "$OLD_ENV" ]; then
         error "Lỗi: Site '$old_domain' không tồn tại."
         return 1
@@ -19,20 +28,11 @@ run_rename_domain() {
         return 1
     fi
 
-    # Quét xem new_domain có đang được dùng làm alias ở bất kỳ web nào không
-    local conflict_file=""
-    for env_file in "$SCRIPT_DIR/sites/".env.*; do
-        [ -f "$env_file" ] || continue
-        if grep "^DOMAIN_ALIASES=" "$env_file" 2>/dev/null | grep -qw "$new_domain"; then
-            conflict_file="$env_file"
-            break
-        fi
-    done
-
+    # Kiểm tra xem new_domain có đang được dùng làm alias ở bất kỳ web nào không
+    local conflict_file=$(check_domain_alias_conflict "$new_domain")
     if [ -n "$conflict_file" ]; then
         # Trích xuất tên domain chính đang giữ alias từ tên file (vd: .env.site.com -> site.com)
-        local conflict_domain
-        conflict_domain=$(basename "$conflict_file" | sed 's/^\.env\.//')
+        local conflict_domain=$(basename "$conflict_file" | sed 's/^\.env\.//')
         
         error "Lỗi: Domain '${new_domain}' đang là Alias của site '${conflict_domain}'."
         error "Yêu cầu gỡ Alias tại site '${conflict_domain}' trước khi đổi tên."
@@ -68,12 +68,18 @@ run_rename_domain() {
     # ── 2. Tạo file env mới ──────────────────────────────────────────────────
     info "Khởi tạo cấu hình: sites/.env.${new_domain}..."
     cp "$OLD_ENV" "$NEW_ENV"
-    sed -i "s|^APP_DOMAIN=.*|APP_DOMAIN=\"${new_domain}\"|" "$NEW_ENV"
+    update_env_var "APP_DOMAIN" "${new_domain}" "$NEW_ENV"
     # Cập nhật đường dẫn SSH key trỏ đến key mới
-    sed -i "s|id_ed25519_${old_domain}|id_ed25519_${new_domain}|g" "$NEW_ENV"
+    local old_key_file="id_ed25519_${old_domain}"
+    local new_key_file="id_ed25519_${new_domain}"
+    local current_ssh_path=$(grep -oP "(?<=^SSH_KEY_PATH=\")[^\"]+" "$NEW_ENV" || echo "")
+    if [ -n "$current_ssh_path" ]; then
+        local new_ssh_path=${current_ssh_path//$old_key_file/$new_key_file}
+        update_env_var "SSH_KEY_PATH" "$new_ssh_path" "$NEW_ENV"
+    fi
     harden_permissions "$NEW_ENV"
 
-    # ── 3. Rename SSH Key ────────────────────────────────────────────────────
+    # ── 3. Đổi tên SSH Key ────────────────────────────────────────────────────
     local old_key="/var/www/.vps_keys/id_ed25519_${old_domain}"
     local new_key="/var/www/.vps_keys/id_ed25519_${new_domain}"
     if [ -f "$old_key" ]; then
@@ -82,12 +88,12 @@ run_rename_domain() {
         mv "${old_key}.pub" "${new_key}.pub" 2>/dev/null || true
     fi
 
-    # ── 4. mv Web Root + Fix Symlinks ────────────────────────────────────────
+    # ── 4. mv Web Root & Sửa Lại Các Đường dẫn Symlink ───────────────────────
     if [ -d "/var/www/${old_domain}" ]; then
         info "Di chuyển Web Root..."
         mv "/var/www/${old_domain}" "/var/www/${new_domain}"
 
-        # Fix symlink current → release mới nhất
+        # Sửa symlink current → release mới nhất
         local releases_dir="/var/www/${new_domain}/releases"
         local latest_release
         latest_release=$(ls -1t "$releases_dir" 2>/dev/null | head -1)
@@ -95,7 +101,7 @@ run_rename_domain() {
             info "Cấu hình symlink 'current'..."
             ln -nfs "${releases_dir}/${latest_release}" "/var/www/${new_domain}/current"
 
-            # Fix symlinks storage + .env bên trong từng release (đường dẫn tuyệt đối bị hỏng sau mv)
+            # Sửa symlinks storage & .env bên trong từng release (đường dẫn tuyệt đối bị hỏng sau di chuyển)
             for rel_dir in "${releases_dir}"/*/; do
                 [ -d "$rel_dir" ] || continue
                 ln -nfs "/var/www/${new_domain}/shared/storage" "${rel_dir}storage"
@@ -105,37 +111,30 @@ run_rename_domain() {
         fi
     fi
 
-    # ── 5. Nginx Config ──────────────────────────────────────────────────────────────
+    # ── 5. Cấu hình Nginx ────────────────────────────────────────────────────
     info "Cấu hình Nginx..."
     local php_ver="${PHP_VERSION:-8.3}"
     local aliases_str="${DOMAIN_ALIASES:-}"
-    # Build SERVER_NAMES sạch: không dư dấu cách
+    # Xây dựng danh sách SERVER_NAMES: domain mới + các alias (nếu có)
     local server_names="$new_domain"
     [ -n "$aliases_str" ] && server_names="$new_domain $aliases_str"
-    local nginx_conf="/etc/nginx/sites-available/${new_domain}"
 
-    sed "s/{{APP_DOMAIN}}/${new_domain}/g; \
-         s/{{PHP_VERSION}}/${php_ver}/g; \
-         s/{{SERVER_NAMES}}/${server_names}/g" \
-        "$SCRIPT_DIR/configs/nginx-template.conf" > "$nginx_conf"
-
-    ln -nfs "$nginx_conf" "/etc/nginx/sites-enabled/${new_domain}"
+    generate_nginx_config "$new_domain" "$server_names" "$php_ver"
     rm -f "/etc/nginx/sites-enabled/${old_domain}"
     rm -f "/etc/nginx/sites-available/${old_domain}"
     systemctl reload nginx
 
-    # ── 6. Supervisor Config ─────────────────────────────────────────────────
+    # ── 6. Cấu hình Supervisor ───────────────────────────────────────────────
     info "Cấu hình Supervisor..."
     local old_sup="/etc/supervisor/conf.d/${OLD_SAFE}.conf"
     local new_sup="/etc/supervisor/conf.d/${NEW_SAFE}.conf"
     if [ -f "$old_sup" ]; then
         cp "$old_sup" "$new_sup"
         
-        # SỬ DỤNG PHƯƠNG PHÁP CỤ THỂ HOÁ MỤC TIÊU (EXPLICIT TARGETING)
-        # 1. Chỉ thay thế cho đường dẫn web root (Để tránh đụng chạm linh tinh)
+        # Cập nhật đường dẫn web root trong file cấu hình mới
         sed -i "s|/var/www/${old_domain}/|/var/www/${new_domain}/|g" "$new_sup"
         
-        # 2. Thay thế vào đúng các thẻ (tags) định danh chuẩn của phần mềm Supervisor
+        # Cập nhật các định danh nhóm và chương trình Supervisor
         sed -i "s|group:${OLD_SAFE}\]|group:${NEW_SAFE}\]|g" "$new_sup"
         sed -i "s|program:${OLD_SAFE}-|program:${NEW_SAFE}-|g" "$new_sup"
         sed -i "s|programs=${OLD_SAFE}-|programs=${NEW_SAFE}-|g" "$new_sup"
@@ -146,7 +145,7 @@ run_rename_domain() {
         supervisorctl reread
         supervisorctl update
         
-        # Chỉ restart nếu dự án đã thực sự được Deploy (tồn tại thư mục current)
+        # Khởi động lại các tác vụ nếu đã deploy thành công trước đó (tồn tại liên kết current)
         if [ -L "/var/www/${new_domain}/current" ]; then
             supervisorctl restart "${NEW_SAFE}:*" 2>/dev/null || true
         else
@@ -158,10 +157,10 @@ run_rename_domain() {
     local shared_env="/var/www/${new_domain}/shared/.env"
     if [ -f "$shared_env" ]; then
         info "Cập nhật APP_URL..."
-        sed -i "s|^APP_URL=.*|APP_URL=https://${new_domain}|g" "$shared_env"
+        update_env_var "APP_URL" "https://${new_domain}" "$shared_env"
     fi
 
-    # ── 8. Cập nhật Crontab ──────────────────────────────────────────────────
+    # ── 8. Cập nhật Crontab của App User ──────────────────────────────────────
     if sudo -u "$app_user" crontab -l 2>/dev/null | grep -q "cd /var/www/${old_domain}/current"; then
         info "Cập nhật Crontab..."
         sudo -u "$app_user" crontab -l \
@@ -169,18 +168,17 @@ run_rename_domain() {
             | sudo -u "$app_user" crontab -
     fi
 
-    # ── 9. Xóa SSL Cert cũ ───────────────────────────────────────────────────
+    # ── 9. Xóa SSL Certificate cũ ────────────────────────────────────────────
     if [ -d "/etc/letsencrypt/live/${old_domain}" ]; then
         info "Gỡ bỏ SSL certificate cũ..."
         certbot delete --cert-name "${old_domain}" --non-interactive 2>/dev/null \
-            || warn "Không thể xóa cert tự động. Xóa thủ công: certbot delete --cert-name ${old_domain}"
+            || warn "Không thể xóa cert tự động. Xóa thủ công bằng lệnh: certbot delete --cert-name ${old_domain}"
     fi
 
-    # ── 10. Xóa env cũ ───────────────────────────────────────────────────────
+    # ── 10. Dọn dẹp File Env cũ ──────────────────────────────────────────────
     rm -f "$OLD_ENV"
     info "Xóa cấu hình cũ: .env.${old_domain}"
 
-    # ── Hoàn tất ─────────────────────────────────────────────────────────────
     info "================================================================="
     info " THÀNH CÔNG: Thay đổi domain hoàn tất."
     info "-----------------------------------------------------------------"
