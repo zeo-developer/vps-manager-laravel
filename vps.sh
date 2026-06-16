@@ -197,66 +197,66 @@ execute_action() {
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền: ./vps.sh add-site demo.com"; fi
             load_env "$domain_arg" "--skip-check"
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "add" "$domain_arg"
             ;;
         ssl)
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "ssl.sh" || return 1
+            load_module "ssl/ssl.sh" || return 1
             run_ssl_manager "$domain_arg"
             ;;
         deploy-menu)
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "deploy.sh" || return 1
+            load_module "deploy/deploy.sh" || return 1
             run_deploy_menu "$domain_arg"
             ;;
         remove-site)
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền muốn xóa bỏ."; fi
             load_env "$domain_arg"
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "delete" "$domain_arg"
             ;;
         runtime)
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "runtime.sh" || return 1
+            load_module "runtime/runtime.sh" || return 1
             run_runtime_manager "$domain_arg"
             ;;
         logs)
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "logs.sh" || return 1
+            load_module "logs/logs.sh" || return 1
             run_logs "$domain_arg"
             ;;
         manage-laravel)
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "laravel.sh" || return 1
+            load_module "laravel/laravel.sh" || return 1
             run_laravel_manager "$domain_arg"
             ;;
         info)
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "info" "$domain_arg"
             ;;
         db)
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "db.sh" || return 1
+            load_module "db/db.sh" || return 1
             run_db_manager "$domain_arg"
             ;;
         update)
             require_root
             load_env
-            load_module "update.sh" || return 1
+            load_module "update/update.sh" || return 1
             run_update
             ;;
 
@@ -272,38 +272,38 @@ execute_action() {
                 error "Tên miền mới '$extra_arg' không đúng định dạng!"
                 return 1
             fi
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "rename" "$domain_arg" "$extra_arg"
             ;;
         add-alias)
             require_root
             if [ -z "$domain_arg" ]; then error "Cú pháp đúng: ./vps.sh add-alias primary.com alias.com"; return 1; fi
             load_env "$domain_arg"
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "add-alias" "$domain_arg" "$extra_arg"
             ;;
         remove-alias)
             require_root
             if [ -z "$domain_arg" ]; then error "Cú pháp đúng: ./vps.sh remove-alias primary.com alias.com"; return 1; fi
             load_env "$domain_arg"
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "remove-alias" "$domain_arg" "$extra_arg"
             ;;
         manage-alias)
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "manage-alias" "$domain_arg"
             ;;
         manage-swap)
             require_root
-            load_module "swap.sh" || return 1
+            load_module "swap/swap.sh" || return 1
             run_swap_manager
             ;;
         manage-domain)
             require_root
-            load_module "domain.sh" || return 1
+            load_module "domain/domain.sh" || return 1
             run_domain_action "menu"
             ;;
         *)

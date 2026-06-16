@@ -46,16 +46,16 @@ Dự án tập trung vào 3 tiêu chí cốt lõi: **Hiệu năng (Performance)*
 ├── .env.global.example     # Tổ hợp cấu hình vận hành nội bộ (Telegram/DB Root)
 ├── .env.site.example       # Mẫu thiết lập tham số cho từng cấu hình Domain
 ├── modules/                # Tập hợp thư viện Core Bash Scripts điều khiển riêng
-│   ├── db.sh               # Loader điều phối quản lý CSDL (password, remote access)
-│   ├── db/                 # Thư mục con chứa sub-module quản lý Database
+│   ├── db/                 # Thư mục con chứa các file quản lý Database
+│   │   ├── db.sh           # Loader điều phối quản lý CSDL (password, remote access)
 │   │   ├── password.sh     # Đổi mật khẩu database của website
 │   │   └── remote.sh       # Quản lý quyền truy cập MySQL từ xa qua IP
-│   ├── deploy.sh           # Loader điều phối triển khai và khôi phục website
-│   ├── deploy/             # Thư mục con chứa các sub-module deploy/rollback
-│   │   ├── deploy.sh       # Thuật toán CI/CD Zero-Downtime Deploy
+│   ├── deploy/             # Thư mục con chứa các file Deploy & Rollback
+│   │   ├── deploy.sh       # Loader điều phối triển khai và khôi phục website
+│   │   ├── main.sh         # Thuật toán CI/CD Zero-Downtime Deploy
 │   │   └── rollback.sh     # Thuật toán Rollback phiên bản cũ
-│   ├── domain.sh           # Menu phụ điều phối Quản lý Website
-│   ├── domain/             # Thư mục con chứa các sub-module domain
+│   ├── domain/             # Thư mục con chứa các file quản lý Domain
+│   │   ├── domain.sh       # Menu phụ điều phối Quản lý Website
 │   │   ├── add.sh          # Tạo mới website (Nginx, DB, SSL, SSH Key)
 │   │   ├── alias.sh        # Quản lý ánh xạ tên miền phụ (Domain Alias)
 │   │   ├── delete.sh       # Xóa website và giải phóng tài nguyên
@@ -68,33 +68,33 @@ Dự án tập trung vào 3 tiêu chí cốt lõi: **Hiệu năng (Performance)*
 │   │   ├── init.sh         # Khởi tạo môi trường, kiểm tra root, sinh pass MariaDB
 │   │   ├── menu.sh         # Hiển thị menu giới thiệu tiến trình cài đặt
 │   │   └── system.sh       # Cấu hình OS, SSH, Firewall, Fail2Ban
-│   ├── laravel.sh          # Loader điều phối quản lý dự án Laravel
-│   ├── laravel/            # Thư mục con chứa các sub-module quản lý Laravel
+│   ├── laravel/            # Thư mục con chứa các file quản lý Laravel
+│   │   ├── laravel.sh      # Loader điều phối quản lý dự án Laravel
 │   │   ├── artisan.sh      # Thực thi lệnh Artisan (migrate, rollback, key, jwt, link)
 │   │   ├── build.sh        # Biên dịch asset front-end (npm run build/build:ssr)
 │   │   ├── cache.sh        # Dọn dẹp cache và lưu cấu hình tối ưu hiệu năng
 │   │   ├── queue.sh        # Cấu hình Custom Queue Worker cho Laravel
 │   │   ├── scheduler.sh    # Bật/tắt Laravel Scheduler
 │   │   └── ssr.sh          # Bật/tắt và quản lý Supervisor Inertia SSR
-│   ├── logs.sh             # Loader quản lý Giám sát Log hệ thống
-│   ├── logs/               # Thư mục con chứa sub-module Log
+│   ├── logs/               # Thư mục con chứa các file quản lý Log
+│   │   ├── logs.sh         # Loader quản lý Giám sát Log hệ thống
 │   │   └── watch.sh        # Trình theo dõi realtime các luồng log
-│   ├── runtime.sh          # Loader quản lý runtime PHP và Node.js
-│   ├── runtime/            # Thư mục con chứa sub-module runtime
+│   ├── runtime/            # Thư mục con chứa các file quản lý Runtime
+│   │   ├── runtime.sh      # Loader quản lý runtime PHP và Node.js
 │   │   ├── node.sh         # Quản lý Node.js và wrapper toàn cục
 │   │   └── php.sh          # Quản lý PHP-FPM socket và php wrapper
-│   ├── ssl.sh              # Loader quản lý Chứng chỉ SSL Let's Encrypt
-│   ├── ssl/                # Thư mục con chứa sub-module SSL
+│   ├── ssl/                # Thư mục con chứa các file quản lý SSL
+│   │   ├── ssl.sh          # Loader quản lý Chứng chỉ SSL Let's Encrypt
 │   │   ├── install.sh      # Cài đặt SSL Let's Encrypt
 │   │   └── renew.sh        # Gia hạn tự động chứng chỉ SSL
-│   ├── swap.sh             # Loader quản lý bộ nhớ ảo SWAP
-│   ├── swap/               # Thư mục con chứa sub-module SWAP
+│   ├── swap/               # Thư mục con chứa các file quản lý SWAP
+│   │   ├── swap.sh         # Loader quản lý bộ nhớ ảo SWAP
 │   │   ├── create.sh       # Tạo mới file SWAP
 │   │   ├── delete.sh       # Xóa bỏ file SWAP hiện tại
 │   │   ├── status.sh       # Kiểm tra trạng thái bộ nhớ ảo SWAP
 │   │   └── swappiness.sh   # Cấu hình chỉ số Swappiness hệ thống
-│   ├── update.sh           # Loader quản lý Cập nhật hệ thống
-│   ├── update/             # Thư mục con chứa sub-module Cập nhật
+│   ├── update/             # Thư mục con chứa các file cập nhật hệ thống
+│   │   ├── update.sh       # Loader quản lý Cập nhật hệ thống
 │   │   └── run.sh          # Cập nhật hệ thống OS & dọn dẹp RAM Cache
 │   └── utils.sh            # Các hàm helper kiểm tra, xuất dữ liệu và MariaDB Auth
 ├── configs/                # Thành phần nguyên mẫu (Templates Configurations Structure)
