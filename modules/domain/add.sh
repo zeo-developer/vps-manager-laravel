@@ -11,6 +11,12 @@
 #-----------------------------------------------------------------------------
 run_add_site() {
     local domain="$1"
+
+    if ! is_valid_domain "$domain"; then
+        error "Lỗi: Tên miền '$domain' không đúng định dạng (VD: example.com, sub.domain.vn)."
+        return 1
+    fi
+
     info "Khởi tạo môi trường cho domain: ${domain}..."
 
     # 1. Tạo file cấu hình riêng .env.$domain

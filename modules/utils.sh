@@ -150,6 +150,23 @@ run_mysql_secure() {
     return $_exit_code
 }
 
+#-----------------------------------------------------------------------------
+# Hàm:          is_valid_domain
+# Mô tả:        Kiểm tra tính hợp lệ của một tên miền.
+# Biến toàn cục: Không có
+# Tham số:      $1 - Tên miền cần kiểm tra
+# Trả về:       0 nếu hợp lệ, 1 nếu không hợp lệ
+#-----------------------------------------------------------------------------
+is_valid_domain() {
+    local domain="$1"
+    # Biểu thức chính quy kiểm tra định dạng tên miền
+    if [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$ ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # =========================================================================
 # CÁC HÀM QUẢN LÝ DANH SÁCH SITE
 # =========================================================================
