@@ -9,15 +9,17 @@
 # Tham số:      $1 - Tên miền (Domain)
 #               $2 - Tên user ứng dụng (App User)
 #               $3 - Đường dẫn/Lệnh thực thi PHP
+#               $4 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_artisan_migrate() {
     local domain="$1"
     local app_user="$2"
     local php_bin="$3"
+    local app_path="${4:-/var/www/$domain/current}"
 
-    info "Đang chạy Database Migration (migrate --force) cho $domain..."
-    if sudo -u "$app_user" "$php_bin" "/var/www/$domain/current/artisan" migrate --force; then
+    info "Đang chạy Database Migration (migrate --force) cho $domain tại $app_path..."
+    if sudo -u "$app_user" "$php_bin" "${app_path}/artisan" migrate --force; then
         info "Đã chạy Migration thành công."
         return 0
     else
@@ -33,12 +35,14 @@ run_artisan_migrate() {
 # Tham số:      $1 - Tên miền (Domain)
 #               $2 - Tên user ứng dụng (App User)
 #               $3 - Đường dẫn/Lệnh thực thi PHP
+#               $4 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_artisan_rollback() {
     local domain="$1"
     local app_user="$2"
     local php_bin="$3"
+    local app_path="${4:-/var/www/$domain/current}"
 
     warn "CẢNH BÁO: Sếp chuẩn bị khôi phục lại (Rollback) các migration vừa chạy!"
     local confirm
@@ -48,8 +52,8 @@ run_artisan_rollback() {
         return 0
     fi
 
-    info "Đang chạy rollback migration cho $domain..."
-    if sudo -u "$app_user" "$php_bin" "/var/www/$domain/current/artisan" migrate:rollback --force; then
+    info "Đang chạy rollback migration cho $domain tại $app_path..."
+    if sudo -u "$app_user" "$php_bin" "${app_path}/artisan" migrate:rollback --force; then
         info "Đã rollback thành công."
         return 0
     else
@@ -65,16 +69,17 @@ run_artisan_rollback() {
 # Tham số:      $1 - Tên miền (Domain)
 #               $2 - Tên user ứng dụng (App User)
 #               $3 - Đường dẫn/Lệnh thực thi PHP
+#               $4 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_artisan_key_generate() {
     local domain="$1"
     local app_user="$2"
     local php_bin="$3"
+    local app_path="${4:-/var/www/$domain/current}"
 
-    info "Đang tạo Application Key cho $domain..."
-    # key:generate sẽ tự động ghi đè hoặc tạo cấu hình trong tệp .env (thông qua liên kết symlink đến shared/.env)
-    if sudo -u "$app_user" "$php_bin" "/var/www/$domain/current/artisan" key:generate --force; then
+    info "Đang tạo Application Key cho $domain tại $app_path..."
+    if sudo -u "$app_user" "$php_bin" "${app_path}/artisan" key:generate --force; then
         info "Đã tạo Application Key thành công."
         return 0
     else
@@ -90,21 +95,23 @@ run_artisan_key_generate() {
 # Tham số:      $1 - Tên miền (Domain)
 #               $2 - Tên user ứng dụng (App User)
 #               $3 - Đường dẫn/Lệnh thực thi PHP
+#               $4 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_artisan_jwt_secret() {
     local domain="$1"
     local app_user="$2"
     local php_bin="$3"
+    local app_path="${4:-/var/www/$domain/current}"
 
     # Kiểm tra sự tồn tại của lệnh jwt:secret trong danh sách lệnh của Laravel
-    if ! sudo -u "$app_user" "$php_bin" "/var/www/$domain/current/artisan" list | grep -q "jwt:secret"; then
+    if ! sudo -u "$app_user" "$php_bin" "${app_path}/artisan" list | grep -q "jwt:secret"; then
         error "Lỗi: Dự án của sếp không cài đặt gói tymon/jwt-auth (Không tìm thấy lệnh jwt:secret)."
         return 1
     fi
 
-    info "Đang sinh khóa bí mật JWT secret cho $domain..."
-    if sudo -u "$app_user" "$php_bin" "/var/www/$domain/current/artisan" jwt:secret --force; then
+    info "Đang sinh khóa bí mật JWT secret cho $domain tại $app_path..."
+    if sudo -u "$app_user" "$php_bin" "${app_path}/artisan" jwt:secret --force; then
         info "Đã sinh khóa JWT secret thành công."
         return 0
     else
@@ -120,15 +127,17 @@ run_artisan_jwt_secret() {
 # Tham số:      $1 - Tên miền (Domain)
 #               $2 - Tên user ứng dụng (App User)
 #               $3 - Đường dẫn/Lệnh thực thi PHP
+#               $4 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_artisan_storage_link() {
     local domain="$1"
     local app_user="$2"
     local php_bin="$3"
+    local app_path="${4:-/var/www/$domain/current}"
 
-    info "Đang tạo Storage Symlink cho $domain..."
-    if sudo -u "$app_user" "$php_bin" "/var/www/$domain/current/artisan" storage:link; then
+    info "Đang tạo Storage Symlink cho $domain tại $app_path..."
+    if sudo -u "$app_user" "$php_bin" "${app_path}/artisan" storage:link; then
         info "Đã tạo liên kết storage:link thành công."
         return 0
     else
@@ -136,3 +145,4 @@ run_artisan_storage_link() {
         return 1
     fi
 }
+

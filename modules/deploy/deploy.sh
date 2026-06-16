@@ -6,16 +6,17 @@
 # Hàm:          run_migration_with_detection
 # Mô tả:        Thực thi database migrations và phát hiện xem có bảng/cột mới nào không.
 # Biến toàn cục: PHP_VERSION, APP_USER, MIGRATE_NEW
-# Tham số:      Không có
+# Tham số:      $1 - Đường dẫn thư mục dự án (Tùy chọn)
 # Trả về:       Mã exit code của lệnh migrate
 #-----------------------------------------------------------------------------
 run_migration_with_detection() {
+    local app_path="${1:-/var/www/$APP_DOMAIN/current}"
     local migrate_output=""
     local status=0
 
     MIGRATE_NEW=false
 
-    migrate_output=$(sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate --force 2>&1)
+    migrate_output=$(sudo -u "$APP_USER" php${PHP_VERSION} "${app_path}/artisan" migrate --force 2>&1)
     status=$?
 
     echo "$migrate_output"
@@ -31,13 +32,14 @@ run_migration_with_detection() {
 # Hàm:          rollback_new_migrations_if_needed
 # Mô tả:        Tự động khôi phục cấu trúc DB nếu tiến trình build bị lỗi sau khi migrate.
 # Biến toàn cục: MIGRATE_NEW, APP_USER, PHP_VERSION
-# Tham số:      Không có
+# Tham số:      $1 - Đường dẫn thư mục dự án (Tùy chọn)
 # Trả về:       Không có
 #-----------------------------------------------------------------------------
 rollback_new_migrations_if_needed() {
+    local app_path="${1:-/var/www/$APP_DOMAIN/current}"
     if [ "$MIGRATE_NEW" = true ]; then
-        warn "Phát hiện migration mới. Đang rollback database..."
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan migrate:rollback --force || warn "⚠️ Rollback DB tự động thất bại"
+        warn "Phát hiện migration mới. Đang rollback database tại $app_path..."
+        sudo -u "$APP_USER" php${PHP_VERSION} "${app_path}/artisan" migrate:rollback --force || warn "⚠️ Rollback DB tự động thất bại"
     fi
 }
 
@@ -62,6 +64,9 @@ run_deploy() {
     # Nạp công cụ quản lý phiên bản Node và đảm bảo phiên bản chính xác
     load_module "runtime.sh" || return 1
     ensure_site_node_version "$APP_DOMAIN" "${NODE_VERSION:-20}" || return 1
+
+    # Nạp loader Laravel để tái sử dụng toàn bộ Artisan/Cache/Build helpers
+    load_module "laravel.sh" || return 1
 
     # Khởi tạo các đường dẫn động dựa trên APP_DOMAIN
     local BASE_DIR="/var/www/${APP_DOMAIN}"
@@ -139,7 +144,7 @@ run_deploy() {
     cleanup_failed_release() {
         if [ -d "$NEW_RELEASE" ]; then
             cd "$NEW_RELEASE" || return 1
-            rollback_new_migrations_if_needed
+            rollback_new_migrations_if_needed "$NEW_RELEASE"
             cd "$RELEASES_DIR" || cd /tmp
             warn "Lỗi tiến trình build. Đang dọn dẹp release: $TIMESTAMP"
             rm -rf "$NEW_RELEASE"
@@ -222,40 +227,54 @@ run_deploy() {
     # Tạo khoá APP_KEY nếu là lần đầu tiên deploy
     if [ -f "artisan" ]; then
         if ! grep -q "APP_KEY=base64:" "${SHARED_DIR}/.env"; then
-            sudo -u "$APP_USER" php${PHP_VERSION} artisan key:generate --force || { cleanup_failed_release; error "Lỗi khi tạo APP_KEY"; return 1; }
+            run_artisan_key_generate "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
         fi
     fi
 
-    # Cài đặt và biên dịch các gói NPM
+    # Cài đặt và biên dịch các gói NPM (Tùy chọn)
+    local run_npm="n"
     if [ -f "package.json" ]; then
+        echo -e ""
+        read -p "Sếp có muốn Biên dịch Front-end Assets (npm run build) ngay bây giờ không? (y/n): " run_npm
+    fi
+
+    if [[ "$run_npm" =~ ^[Yy]$ ]]; then
         info "Cài đặt & Build NPM packages bằng Node.js ${NODE_VERSION:-20}.x..."
         sudo -u "$APP_USER" npm${NODE_VERSION:-20} install || { cleanup_failed_release; error "Lỗi khi chạy npm install"; return 1; }
-        sudo -u "$APP_USER" npm${NODE_VERSION:-20} run build || { cleanup_failed_release; error "Lỗi khi chạy npm run build"; return 1; }
+        run_npm_build "$APP_DOMAIN" "$APP_USER" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
     fi
 
     # Bước 4: Thực thi các câu lệnh Laravel Artisan
     if [ -f "artisan" ]; then
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan storage:link --force || warn "⚠️ Không thể tạo storage:link"
-        run_migration_with_detection || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
+        run_artisan_storage_link "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || warn "⚠️ Không thể tạo storage:link"
+        
+        # Hỏi chạy Database Migration
+        local run_migrate="n"
+        read -p "Sếp có muốn thực thi Database Migrations (migrate) ngay bây giờ không? (y/n): " run_migrate
+        if [[ "$run_migrate" =~ ^[Yy]$ ]]; then
+            run_migration_with_detection "$NEW_RELEASE" || { cleanup_failed_release; error "Lỗi khi chạy migration"; return 1; }
+        fi
 
         if [ "$USE_JWT" = "true" ]; then
             if ! grep -q "^JWT_SECRET=.\+" "${SHARED_DIR}/.env" 2>/dev/null; then
-                info "Khởi tạo JWT Secret..."
-                sudo -u "$APP_USER" php${PHP_VERSION} artisan jwt:secret --force || true
+                run_artisan_jwt_secret "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || true
             fi
         fi
 
-        # Dọn dẹp cache và lưu cache cấu hình tối ưu hiệu năng
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan optimize:clear || { cleanup_failed_release; error "Lỗi khi clear optimize"; return 1; }
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan config:cache || { cleanup_failed_release; error "Lỗi khi cache config"; return 1; }
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan route:cache || { cleanup_failed_release; error "Lỗi khi cache route"; return 1; }
-        sudo -u "$APP_USER" php${PHP_VERSION} artisan view:cache || { cleanup_failed_release; error "Lỗi khi cache view"; return 1; }
+        # Hỏi tối ưu hóa cache
+        local run_optimize="n"
+        read -p "Sếp có muốn chạy Tối ưu hóa Cache Laravel (optimize) ngay bây giờ không? (y/n): " run_optimize
+        if [[ "$run_optimize" =~ ^[Yy]$ ]]; then
+            run_optimize_cache "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
+        else
+            run_clear_cache "$APP_DOMAIN" "$APP_USER" "php${PHP_VERSION}" "$NEW_RELEASE"
+        fi
     fi
 
-    # Khởi chạy SSR nếu sử dụng Inertia
-    if [ "$USE_SSR" = "true" ] && [ -f "package.json" ]; then
+    # Khởi chạy SSR nếu sử dụng Inertia (Tùy thuộc sếp chọn build asset)
+    if [ "$USE_SSR" = "true" ] && [ -f "package.json" ] && [[ "$run_npm" =~ ^[Yy]$ ]]; then
         if grep -q "build:ssr" "$NEW_RELEASE/package.json"; then
-            sudo -u "$APP_USER" npm${NODE_VERSION:-20} run build:ssr || { cleanup_failed_release; error "Lỗi khi build SSR"; return 1; }
+            run_npm_build_ssr "$APP_DOMAIN" "$APP_USER" "$NEW_RELEASE" || { cleanup_failed_release; return 1; }
         fi
     fi
 
@@ -307,3 +326,4 @@ run_deploy() {
     info " Bản phát hành: $TIMESTAMP"
     info "================================================================="
 }
+

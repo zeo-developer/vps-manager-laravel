@@ -8,11 +8,13 @@
 # Biến toàn cục: SCRIPT_DIR, NODE_VERSION
 # Tham số:      $1 - Tên miền chính (Domain)
 #               $2 - Tên tài khoản user ứng dụng (App User)
+#               $3 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_npm_build() {
     local domain="$1"
     local app_user="$2"
+    local app_path="${3:-/var/www/$domain/current}"
     
     # Nạp cấu hình site nếu chưa có biến NODE_VERSION
     local node_ver="${NODE_VERSION:-20}"
@@ -20,15 +22,15 @@ run_npm_build() {
     [ -f "$site_env" ] && source "$site_env" && node_ver="${NODE_VERSION:-20}"
 
     # Kiểm tra xem package.json có tồn tại trong thư mục mã nguồn
-    if [ ! -f "/var/www/$domain/current/package.json" ]; then
-        error "Lỗi: Không tìm thấy package.json trong thư mục current của $domain."
+    if [ ! -f "${app_path}/package.json" ]; then
+        error "Lỗi: Không tìm thấy package.json trong thư mục ${app_path} của $domain."
         return 1
     fi
 
-    info "Đang chạy biên dịch asset (npm${node_ver} run build) cho $domain..."
+    info "Đang chạy biên dịch asset (npm${node_ver} run build) cho $domain tại $app_path..."
     
     # Chạy build trực tiếp bằng npm${node_ver} dưới quyền app_user
-    if cd "/var/www/$domain/current" && sudo -u "$app_user" npm${node_ver} run build; then
+    if cd "${app_path}" && sudo -u "$app_user" npm${node_ver} run build; then
         info "Biên dịch asset thành công."
         return 0
     else
@@ -43,30 +45,32 @@ run_npm_build() {
 # Biến toàn cục: SCRIPT_DIR, NODE_VERSION
 # Tham số:      $1 - Tên miền chính (Domain)
 #               $2 - Tên tài khoản user ứng dụng (App User)
+#               $3 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_npm_build_ssr() {
     local domain="$1"
     local app_user="$2"
+    local app_path="${3:-/var/www/$domain/current}"
 
     local node_ver="${NODE_VERSION:-20}"
     local site_env="$SCRIPT_DIR/sites/.env.$domain"
     [ -f "$site_env" ] && source "$site_env" && node_ver="${NODE_VERSION:-20}"
 
-    if [ ! -f "/var/www/$domain/current/package.json" ]; then
-        error "Lỗi: Không tìm thấy package.json trong thư mục current."
+    if [ ! -f "${app_path}/package.json" ]; then
+        error "Lỗi: Không tìm thấy package.json trong thư mục ${app_path}."
         return 1
     fi
 
     # Đọc script package.json kiểm tra xem có hỗ trợ build:ssr không
-    if ! grep -q '"build:ssr"' "/var/www/$domain/current/package.json"; then
+    if ! grep -q '"build:ssr"' "${app_path}/package.json"; then
         error "Lỗi: File package.json không định nghĩa script 'build:ssr' (Inertia SSR)."
         return 1
     fi
 
-    info "Đang chạy biên dịch Inertia SSR (npm${node_ver} run build:ssr) cho $domain..."
+    info "Đang chạy biên dịch Inertia SSR (npm${node_ver} run build:ssr) cho $domain tại $app_path..."
     
-    if cd "/var/www/$domain/current" && sudo -u "$app_user" npm${node_ver} run build:ssr; then
+    if cd "${app_path}" && sudo -u "$app_user" npm${node_ver} run build:ssr; then
         info "Biên dịch SSR (npm${node_ver} run build:ssr) thành công."
         return 0
     else
@@ -74,3 +78,4 @@ run_npm_build_ssr() {
         return 1
     fi
 }
+

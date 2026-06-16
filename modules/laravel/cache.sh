@@ -9,13 +9,15 @@
 # Tham số:      $1 - Tên miền chính (Domain)
 #               $2 - Tên tài khoản user ứng dụng (App User)
 #               $3 - Đường dẫn/Lệnh thực thi PHP
+#               $4 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_clear_cache() {
     local domain="$1"
     local app_user="$2"
     local php_bin="$3"
-    local artisan_path="/var/www/$domain/current/artisan"
+    local app_path="${4:-/var/www/$domain/current}"
+    local artisan_path="${app_path}/artisan"
 
     info "Đang tiến hành dọn dẹp bộ nhớ cache (Clear Cache) cho $domain..."
     
@@ -35,13 +37,15 @@ run_clear_cache() {
 # Tham số:      $1 - Tên miền chính (Domain)
 #               $2 - Tên tài khoản user ứng dụng (App User)
 #               $3 - Đường dẫn/Lệnh thực thi PHP
+#               $4 - Đường dẫn thư mục dự án (Tùy chọn, mặc định: current)
 # Trả về:       0 nếu thành công, 1 nếu thất bại
 #-----------------------------------------------------------------------------
 run_optimize_cache() {
     local domain="$1"
     local app_user="$2"
     local php_bin="$3"
-    local artisan_path="/var/www/$domain/current/artisan"
+    local app_path="${4:-/var/www/$domain/current}"
+    local artisan_path="${app_path}/artisan"
 
     info "Đang lưu cấu hình và tối ưu hóa hiệu năng (Config/Route/View Cache)..."
     
@@ -65,3 +69,4 @@ run_optimize_cache() {
         return 1
     fi
 }
+
