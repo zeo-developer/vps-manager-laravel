@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# modules/manage-db.sh
-# Quản lý Database: Điều phối thay đổi mật khẩu & Cấu hình kết nối Remote
+# modules/db.sh
+# Bộ nạp và điều phối quản lý Cơ sở dữ liệu (Database)
 
 # Nạp các sub-module chuyên biệt
 load_module "db/password.sh" || return 1
 load_module "db/remote.sh" || return 1
 
 #-----------------------------------------------------------------------------
-# Hàm:          run_manage_db
+# Hàm:          run_db_manager
 # Mô tả:        Menu điều phối quản trị cơ sở dữ liệu của một website cụ thể.
 # Biến toàn cục: CYAN, NC, GREEN, RED
 # Tham số:      $1 - Tên miền chính (Domain)
 # Trả về:       Không có (Hoặc trả về 2 để quay lại menu chính)
 #-----------------------------------------------------------------------------
-run_manage_db() {
+run_db_manager() {
     local domain="$1"
     
     echo -e "${CYAN}==========================================${NC}"
@@ -32,6 +32,6 @@ run_manage_db() {
         2) enable_remote_db "$domain" ;;
         3) disable_remote_db "$domain" ;;
         0) return 2 ;;
-        *) warn "Lựa chọn không hợp lệ."; run_manage_db "$domain" ;;
+        *) warn "Lựa chọn không hợp lệ."; run_db_manager "$domain" ;;
     esac
 }

@@ -141,7 +141,7 @@ show_cli_menu() {
             5) 
                DOMAIN_PROMPT=$(select_site_menu "Chọn domain quản lý Database")
                [ $? -ne 0 ] && continue
-               execute_action "manage-db" "$DOMAIN_PROMPT" 
+               execute_action "db" "$DOMAIN_PROMPT" 
                [ $? -eq 2 ] && continue
                ;;
             6) 
@@ -246,12 +246,12 @@ execute_action() {
             load_module "domain.sh" || return 1
             run_domain_action "info" "$domain_arg"
             ;;
-        manage-db)
+        db)
             require_root
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
-            load_module "manage-db.sh" || return 1
-            run_manage_db "$domain_arg"
+            load_module "db.sh" || return 1
+            run_db_manager "$domain_arg"
             ;;
         update)
             require_root
