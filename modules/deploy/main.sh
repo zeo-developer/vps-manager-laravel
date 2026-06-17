@@ -177,9 +177,6 @@ run_deploy() {
     sed -i "s/^APP_ENV=.*/APP_ENV=production/g" "${SHARED_DIR}/.env"
     sed -i "s/^APP_DEBUG=.*/APP_DEBUG=false/g" "${SHARED_DIR}/.env"
     
-    # Cấu hình Inertia SSR và JWT giờ đây được quản lý hoàn toàn độc lập thông qua Menu Laravel (manage-laravel).
-    # Không còn ghi đè hoặc tự động cấu hình các biến này trong quá trình deploy nữa.
-    
     # Tạo liên kết tượng trưng (symlinks) cho storage và env sang thư mục release mới
     rm -rf "${NEW_RELEASE}/storage"
     sudo -u "$APP_USER" ln -s "${SHARED_DIR}/storage" "${NEW_RELEASE}/storage"
