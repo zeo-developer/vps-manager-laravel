@@ -6,6 +6,13 @@
 load_module "deploy/main.sh" || return 1
 load_module "deploy/rollback.sh" || return 1
 
+# Nạp các helper xử lý tác vụ (artisan, build, queue, cache, ssr)
+load_module "deploy/helpers/artisan.sh" || return 1
+load_module "deploy/helpers/build.sh" || return 1
+load_module "deploy/helpers/cache.sh" || return 1
+load_module "deploy/helpers/queue.sh" || return 1
+load_module "deploy/helpers/ssr.sh" || return 1
+
 #-----------------------------------------------------------------------------
 # Hàm:          run_deploy_menu
 # Mô tả:        Giao diện menu phụ để chọn Deploy hoặc Rollback cho một domain.

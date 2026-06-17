@@ -107,13 +107,12 @@ show_cli_menu() {
         echo -e " ${GREEN}3.${NC} Triển khai & Khôi phục (Deploy/Rollback)"
         echo -e " ${GREEN}4.${NC} Quản lý phiên bản PHP & Node.js (Runtime)"
         echo -e " ${GREEN}5.${NC} Quản lý Cơ sở dữ liệu"
-        echo -e " ${GREEN}6.${NC} Quản lý Laravel (Artisan, SSR, Cache, Scheduler)"
-        echo -e " ${GREEN}7.${NC} Xem Logs (Realtime)"
-        echo -e " ${YELLOW}8.${NC} Cập nhật máy chủ (OS Update)"
-        echo -e " ${YELLOW}9.${NC} Quản lý SWAP Memory"
+        echo -e " ${GREEN}6.${NC} Xem Logs (Realtime)"
+        echo -e " ${YELLOW}7.${NC} Cập nhật máy chủ (OS Update)"
+        echo -e " ${YELLOW}8.${NC} Quản lý SWAP Memory"
         echo -e " ${RED}0.${NC} Thoát"
         echo -e "------------------------------------------"
-        read -p "Nhập lựa chọn (0-9): " choice
+        read -p "Nhập lựa chọn (0-8): " choice
 
         DOMAIN_PROMPT=""
         case $choice in
@@ -145,20 +144,14 @@ show_cli_menu() {
                [ $? -eq 2 ] && continue
                ;;
             6) 
-               DOMAIN_PROMPT=$(select_site_menu "Chọn domain quản lý Laravel")
-               [ $? -ne 0 ] && continue
-               execute_action "manage-laravel" "$DOMAIN_PROMPT" 
-               [ $? -eq 2 ] && continue
-               ;;
-            7) 
                DOMAIN_PROMPT=$(select_site_menu "Chọn domain xem logs")
                [ $? -ne 0 ] && continue
                execute_action "logs" "$DOMAIN_PROMPT" 
                ;;
-            8) 
+            7) 
                execute_action "update" 
                ;;
-            9) 
+            8) 
                execute_action "manage-swap"
                ;;
             0) exit 0 ;;
@@ -233,13 +226,7 @@ execute_action() {
             load_module "logs/logs.sh" || return 1
             run_logs "$domain_arg"
             ;;
-        manage-laravel)
-            require_root
-            if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
-            load_env "$domain_arg"
-            load_module "laravel/laravel.sh" || return 1
-            run_laravel_manager "$domain_arg"
-            ;;
+
         info)
             if [ -z "$domain_arg" ]; then error "Cần cung cấp tên miền."; fi
             load_env "$domain_arg"
